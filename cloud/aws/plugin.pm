@@ -31,11 +31,17 @@ sub new {
 
     $self->{version} = '0.1';
     %{ $self->{modes} } = (
-        'cloudwatch-get-alarms'     => 'cloud::aws::mode::cloudwatchgetalarms',
-        'cloudwatch-get-metrics'    => 'cloud::aws::mode::cloudwatchgetmetrics',
-        'cloudwatch-list-metrics'   => 'cloud::aws::mode::cloudwatchlistmetrics',
-        'ec2-instance-status'       => 'cloud::aws::mode::ec2instancestatus',
-        'rds-instance-status'       => 'cloud::aws::mode::rdsinstancestatus',
+        'cloudwatch-get-alarms'     => 'cloud::aws::cloudwatch::mode::getalarms',
+        'cloudwatch-get-metrics'    => 'cloud::aws::cloudwatch::mode::getmetrics',
+        'cloudwatch-list-metrics'   => 'cloud::aws::cloudwatch::mode::listmetrics',
+	    'ec2-asg-cpu'		        => 'cloud::aws::ec2::mode::asgcpu',
+        'ec2-asg-network'           => 'cloud::aws::ec2::mode::asgnetwork',
+        'ec2-instance-status'       => 'cloud::aws::ec2::mode::instancestatus',
+	    'elb-http-codes'	        => 'cloud::aws::elb::mode::httpcodes',
+        'elb-instance-health'       => 'cloud::aws::elb::mode::instancehealth',
+	    'elb-performances'	        => 'cloud::aws::elb::mode::performances',
+        'elb-queues'                => 'cloud::aws::elb::mode::queues',
+        'rds-instance-status'       => 'cloud::aws::rds::mode::instancestatus',
     );
 
     $self->{custom_modes}{paws} = 'cloud::aws::custom::paws';
