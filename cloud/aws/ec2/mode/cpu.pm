@@ -18,17 +18,22 @@
 # limitations under the License.
 #
 
-package cloud::aws::ec2::mode::asgcpu;
+package cloud::aws::ec2::mode::cpu;
 
 use base qw(centreon::plugins::templates::counter);
 
 use strict;
 use warnings;
 
+my %map_type = (
+    "instance" => "InstanceId",
+    "asg" => "AutoScalingGroupName",
+);
+
 sub prefix_metric_output {
     my ($self, %options) = @_;
     
-    return "ASG '" . $options{instance_value}->{display} . "' " . $options{instance_value}->{stat} . " ";
+    return ucfirst($options{instance_value}->{type}) . " '" . $options{instance_value}->{display} . "' " . $options{instance_value}->{stat} . " ";
 }
 
 sub set_counters {
@@ -41,7 +46,7 @@ sub set_counters {
     foreach my $statistic ('minimum', 'maximum', 'average', 'sum') {
         foreach my $metric ('CPUCreditBalance', 'CPUCreditUsage', 'CPUSurplusCreditBalance', 'CPUSurplusCreditsCharged') {
             my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
-                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'stat' } ],
+                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'type' }, { name => 'stat' } ],
                                 output_template => $metric . ': %.3f',
                                 perfdatas => [
                                     { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
@@ -53,7 +58,7 @@ sub set_counters {
         }
         foreach my $metric ('CPUUtilization') {
             my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
-                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'stat' } ],
+                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'type' }, { name => 'stat' } ],
                                 output_template => $metric . ': %.2f %%',
                                 perfdatas => [
                                     { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
@@ -75,7 +80,8 @@ sub new {
     $options{options}->add_options(arguments =>
                                 {
                                     "region:s"        => { name => 'region' },
-                                    "asg-name:s@"	  => { name => 'asg_name' },
+                                    "type:s"	      => { name => 'type' },
+                                    "instance:s@"	  => { name => 'instance' },
                                     "filter-metric:s" => { name => 'filter_metric' },
                                     "statistic:s@"    => { name => 'statistic' },
                                     "timeframe:s"     => { name => 'timeframe', default => 600 },
@@ -94,14 +100,20 @@ sub check_options {
         $self->{output}->option_exit();
     }
 
-    if (!defined($self->{option_results}->{asg_name}) || $self->{option_results}->{asg_name} eq '') {
-        $self->{output}->add_option_msg(short_msg => "Need to specify --asg-name option.");
+    if (!defined($self->{option_results}->{type}) || $self->{option_results}->{type} eq ''
+        || $self->{option_results}->{type} ne 'asg' && $self->{option_results}->{type} ne 'instance') {
+        $self->{output}->add_option_msg(short_msg => "Need to specify --type option.");
         $self->{output}->option_exit();
     }
 
-    foreach my $asg_name (@{$self->{option_results}->{asg_name}}) {
-        if ($asg_name ne '') {
-            push @{$self->{aws_asg_name}}, $asg_name;
+    if (!defined($self->{option_results}->{instance}) || $self->{option_results}->{instance} eq '') {
+        $self->{output}->add_option_msg(short_msg => "Need to specify --instance option.");
+        $self->{output}->option_exit();
+    }
+
+    foreach my $instance (@{$self->{option_results}->{instance}}) {
+        if ($instance ne '') {
+            push @{$self->{aws_instance}}, $instance;
         }
     }
     
@@ -127,11 +139,11 @@ sub manage_selection {
     my ($self, %options) = @_;
 
     my %metric_results;
-    foreach my $asg_name (@{$self->{aws_asg_name}}) {
-        $metric_results{$asg_name} = $options{custom}->cloudwatch_get_metrics(
+    foreach my $instance (@{$self->{aws_instance}}) {
+        $metric_results{$instance} = $options{custom}->cloudwatch_get_metrics(
             region => $self->{option_results}->{region},
             namespace => 'AWS/EC2',
-            dimensions => [ { Name => 'AutoScalingGroupName', Value => $asg_name } ],
+            dimensions => [ { Name => $map_type{$self->{option_results}->{type}}, Value => $instance } ],
             metrics => $self->{aws_metrics},
             statistics => $self->{aws_statistics},
             timeframe => $self->{option_results}->{timeframe},
@@ -139,14 +151,15 @@ sub manage_selection {
         );
     }
     
-    foreach my $asg_name (keys %metric_results) {
-        foreach my $metric (keys $metric_results{$asg_name}) {
+    foreach my $instance (keys %metric_results) {
+        foreach my $metric (keys $metric_results{$instance}) {
             foreach my $stat ('minimum', 'maximum', 'average', 'sum') {
-                next if (!defined($metric_results{$asg_name}->{$metric}->{$stat}));
+                next if (!defined($metric_results{$instance}->{$metric}->{$stat}));
 
-                $self->{metric}->{$asg_name . "_" . $stat}->{display} = $asg_name;
-                $self->{metric}->{$asg_name . "_" . $stat}->{stat} = $stat;
-                $self->{metric}->{$asg_name . "_" . $stat}->{$metric . "_" . $stat} = $metric_results{$asg_name}->{$metric}->{$stat};
+                $self->{metric}->{$instance . "_" . $stat}->{display} = $instance;
+                $self->{metric}->{$instance . "_" . $stat}->{type} = $self->{option_results}->{type};
+                $self->{metric}->{$instance . "_" . $stat}->{stat} = $stat;
+                $self->{metric}->{$instance . "_" . $stat}->{$metric . "_" . $stat} = $metric_results{$instance}->{$metric}->{$stat};
             }
         }
     }
@@ -166,7 +179,7 @@ __END__
 Check EC2 Auto Scaling Group CPU metrics.
 
 Example: 
-perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=ec2-asg-cpu --region='eu-west-1' --asg-name='centreon-middleware' --filter-metric='Credit' --statistic='average' --critical-cpucreditusage-average='10' --verbose
+perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=ec2-asg-cpu --region='eu-west-1' --type='asg' --instance='centreon-middleware' --filter-metric='Credit' --statistic='average' --critical-cpucreditusage-average='10' --verbose
 
 =over 8
 
@@ -174,9 +187,13 @@ perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=ec
 
 Set the region name (Required).
 
-=item B<--asg-name>
+=item B<--type>
 
-Set the ASG name (Required) (Can be multiple).
+Set the instance type (Required) (Can be: 'asg', 'instance').
+
+=item B<--instance>
+
+Set the instance name (Required) (Can be multiple).
 
 =item B<--filter-metric>
 

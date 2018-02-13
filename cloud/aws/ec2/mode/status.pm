@@ -18,7 +18,7 @@
 # limitations under the License.
 #
 
-package cloud::aws::ec2::mode::asgstatus;
+package cloud::aws::ec2::mode::status;
 
 use base qw(centreon::plugins::templates::counter);
 
@@ -26,6 +26,11 @@ use strict;
 use warnings;
 
 my $instance_mode;
+
+my %map_type = (
+    "instance" => "InstanceId",
+    "asg" => "AutoScalingGroupName",
+);
 
 my %map_status = (
     0 => 'passed',
@@ -35,7 +40,7 @@ my %map_status = (
 sub prefix_metric_output {
     my ($self, %options) = @_;
     
-    return "ASG '" . $options{instance_value}->{display} . "' ";
+    return ucfirst($options{instance_value}->{type}) . " '" . $options{instance_value}->{display} . "' ";
 }
 
 sub custom_status_threshold {
@@ -107,7 +112,8 @@ sub new {
     $options{options}->add_options(arguments =>
                                 {
                                     "region:s"              => { name => 'region' },
-                                    "asg-name:s@"	        => { name => 'asg_name' },
+                                    "type:s"	      => { name => 'type' },
+                                    "instance:s@"	  => { name => 'instance' },
                                     "warning-status:s"      => { name => 'warning_status', default => '' },
                                     "critical-status:s"     => { name => 'critical_status', default => '%{status} =~ /failed/i' },
                                 });
@@ -124,14 +130,20 @@ sub check_options {
         $self->{output}->option_exit();
     }
 
-    if (!defined($self->{option_results}->{asg_name}) || $self->{option_results}->{asg_name} eq '') {
-        $self->{output}->add_option_msg(short_msg => "Need to specify --asg-name option.");
+    if (!defined($self->{option_results}->{type}) || $self->{option_results}->{type} eq ''
+        || $self->{option_results}->{type} ne 'asg' && $self->{option_results}->{type} ne 'instance') {
+        $self->{output}->add_option_msg(short_msg => "Need to specify --type option.");
         $self->{output}->option_exit();
     }
 
-    foreach my $asg_name (@{$self->{option_results}->{asg_name}}) {
-        if ($asg_name ne '') {
-            push @{$self->{aws_asg_name}}, $asg_name;
+    if (!defined($self->{option_results}->{instance}) || $self->{option_results}->{instance} eq '') {
+        $self->{output}->add_option_msg(short_msg => "Need to specify --instance option.");
+        $self->{output}->option_exit();
+    }
+
+    foreach my $instance (@{$self->{option_results}->{instance}}) {
+        if ($instance ne '') {
+            push @{$self->{aws_instance}}, $instance;
         }
     }
     
@@ -159,11 +171,11 @@ sub manage_selection {
     my ($self, %options) = @_;
 
     my %metric_results;
-    foreach my $asg_name (@{$self->{aws_asg_name}}) {
-        $metric_results{$asg_name} = $options{custom}->cloudwatch_get_metrics(
+    foreach my $instance (@{$self->{aws_instance}}) {
+        $metric_results{$instance} = $options{custom}->cloudwatch_get_metrics(
             region => $self->{option_results}->{region},
             namespace => 'AWS/EC2',
-            dimensions => [ { Name => 'AutoScalingGroupName', Value => $asg_name } ],
+            dimensions => [ { Name => $map_type{$self->{option_results}->{type}}, Value => $instance } ],
             metrics => $self->{aws_metrics},
             statistics => $self->{aws_statistics},
             timeframe => '90',
@@ -171,12 +183,13 @@ sub manage_selection {
         );
     }
     
-    foreach my $asg_name (keys %metric_results) {
-        foreach my $metric (keys $metric_results{$asg_name}) {
-            next if (!defined($metric_results{$asg_name}->{$metric}->{average}));
+    foreach my $instance (keys %metric_results) {
+        foreach my $metric (keys $metric_results{$instance}) {
+            next if (!defined($metric_results{$instance}->{$metric}->{average}));
 
-            $self->{metric}->{$asg_name}->{display} = $asg_name;
-            $self->{metric}->{$asg_name}->{$metric} = $metric_results{$asg_name}->{$metric}->{average};
+            $self->{metric}->{$instance}->{display} = $instance;
+            $self->{metric}->{$instance}->{type} = $self->{option_results}->{type};
+            $self->{metric}->{$instance}->{$metric} = $metric_results{$instance}->{$metric}->{average};
         }
     }
 
@@ -195,7 +208,7 @@ __END__
 Check EC2 Auto Scaling Group status metrics.
 
 Example: 
-perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=ec2-asg-status --region='eu-west-1' --asg-name='centreon-middleware' --verbose
+perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=ec2-asg-status --region='eu-west-1' --type='asg' --instancee='centreon-middleware' --verbose
 
 =over 8
 
@@ -203,9 +216,13 @@ perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=ec
 
 Set the region name (Required).
 
-=item B<--asg-name>
+=item B<--type>
 
-Set the ASG name (Required) (Can be multiple).
+Set the instance type (Required) (Can be: 'asg', 'instance').
+
+=item B<--instance>
+
+Set the instance name (Required) (Can be multiple).
 
 =item B<--warning-status>
 
