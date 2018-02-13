@@ -131,8 +131,8 @@ sub set_counters {
     $self->{maps_counters}->{aws_instances} = [
         { label => 'status', threshold => 0, set => {
                 key_values => [ { name => 'state' }, { name => 'display' } ],
-                closure_custom_calc => $self->can('custom_nas_status_calc'),
-                closure_custom_output => $self->can('custom_nas_status_output'),
+                closure_custom_calc => $self->can('custom_status_calc'),
+                closure_custom_output => $self->can('custom_status_output'),
                 closure_custom_perfdata => sub { return 0; },
                 closure_custom_threshold_check => $self->can('custom_status_threshold'),
             }

@@ -28,7 +28,6 @@ use warnings;
 sub prefix_metric_output {
     my ($self, %options) = @_;
     
-    $options{instance_value}->{display} =~ s/_$options{instance_value}->{stat}$//;
     return "ASG '" . $options{instance_value}->{display} . "' " . $options{instance_value}->{stat} . " ";
 }
 
@@ -42,10 +41,10 @@ sub set_counters {
     foreach my $statistic ('minimum', 'maximum', 'average', 'sum') {
         foreach my $metric ('CPUCreditBalance', 'CPUCreditUsage', 'CPUSurplusCreditBalance', 'CPUSurplusCreditsCharged') {
             my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
-                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' } , { name => 'stat' } ],
+                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'stat' } ],
                                 output_template => $metric . ': %.3f',
                                 perfdatas => [
-                                    { label => lc($metric), value => $metric . '_' . $statistic . '_absolute', 
+                                    { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
                                       template => '%.3f', label_extra_instance => 1, instance_use => 'display_absolute' },
                                 ],
                             }
@@ -57,7 +56,7 @@ sub set_counters {
                                 key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'stat' } ],
                                 output_template => $metric . ': %.2f %%',
                                 perfdatas => [
-                                    { label => lc($metric), value => $metric . '_' . $statistic . '_absolute', 
+                                    { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
                                       template => '%.2f', unit => '%', label_extra_instance => 1, instance_use => 'display_absolute' },
                                 ],
                             }
@@ -82,7 +81,6 @@ sub new {
                                     "timeframe:s"     => { name => 'timeframe', default => 600 },
                                     "period:s"        => { name => 'period', default => 60 },
                                 });
-    
     
     return $self;
 }
@@ -146,7 +144,7 @@ sub manage_selection {
             foreach my $stat ('minimum', 'maximum', 'average', 'sum') {
                 next if (!defined($metric_results{$asg_name}->{$metric}->{$stat}));
 
-                $self->{metric}->{$asg_name . "_" . $stat}->{display} = $asg_name . "_" . $stat;
+                $self->{metric}->{$asg_name . "_" . $stat}->{display} = $asg_name;
                 $self->{metric}->{$asg_name . "_" . $stat}->{stat} = $stat;
                 $self->{metric}->{$asg_name . "_" . $stat}->{$metric . "_" . $stat} = $metric_results{$asg_name}->{$metric}->{$stat};
             }
