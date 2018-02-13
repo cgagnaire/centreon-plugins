@@ -38,7 +38,6 @@ sub set_counters {
         { name => 'http_codes', type => 1, cb_prefix_output => 'prefix_elb_output', message_multiple => "Backend HTTP codes are ok", skipped_code => { -10 => 1 } },
     ];
 
-
     foreach my $metric_name ('BackendConnectionErrors', 'HTTPCode-Backend-2XX', 'HTTPCode-Backend-3XX', 'HTTPCode-Backend-4XX', 'HTTPCode-Backend-5XX', 'HTTPCode-ELB-4XX', 'HTTPCode-ELB-5XX') {
         my $entry = { label => lc($metric_name), set => {
                             key_values => [ { name => $metric_name }, { name => 'display' } ],
@@ -63,7 +62,7 @@ sub new {
     $options{options}->add_options(arguments =>
                                 {
                                 "region:s"        => { name => 'region' },
-                                "elb-name:s"	  => { name => 'elb_name' },
+                                "elb-name:s@"	  => { name => 'elb_name' },
                                 "filter-metric:s" => { name => 'filter_metric' },
                                 "statistic:s@"    => { name => 'statistic' },
                                 "timeframe:s"     => { name => 'timeframe', default => 600 },
@@ -83,6 +82,17 @@ sub check_options {
         $self->{output}->option_exit();
     }
 
+    if (!defined($self->{option_results}->{elb_name}) || $self->{option_results}->{elb_name} eq '') {
+        $self->{output}->add_option_msg(short_msg => "Need to specify --elb-name option.");
+        $self->{output}->option_exit();
+    }
+
+    foreach my $elb_name (@{$self->{option_results}->{elb_name}}) {
+        if ($elb_name ne '') {
+            push @{$self->{elb_name}}, $elb_name;
+        }
+    }
+
     foreach my $metric ('HTTPCode_Backend_2XX', 'HTTPCode_Backend_3XX', 'HTTPCode_Backend_4XX', 'HTTPCode_Backend_5XX', 'HTTPCode_ELB_4XX', 'HTTPCode_ELB_5XX', 'BackendConnectionErrors') {
         next if (defined($self->{option_results}->{filter_metric}) && $self->{option_results}->{filter_metric} ne ''
             && $metric !~ /$self->{option_results}->{filter_metric}/);
@@ -93,22 +103,23 @@ sub check_options {
 
 sub manage_selection {
     my ($self, %options) = @_;
-
-    my $metric_results = $options{custom}->cloudwatch_get_metrics(
-        region => $self->{option_results}->{region},
-        namespace => 'AWS/ELB',
-        dimensions => [ { Name => 'LoadBalancerName', Value => $self->{option_results}->{elb_name} } ],
-        metrics => $self->{aws_metrics},
-        statistics => ['Sum'],
-        timeframe => $self->{option_results}->{timeframe},
-        period => $self->{option_results}->{period},
-    );
     
-    foreach my $elb_stat (keys %{$metric_results}) {
-	my $value = $metric_results->{$elb_stat}->{points};
-	$elb_stat =~ s/_/-/g;
-        $self->{http_codes}->{$self->{option_results}->{elb_name}}->{display} = $self->{option_results}->{elb_name};
-        $self->{http_codes}->{$self->{option_results}->{elb_name}}->{$elb_stat} = $value; 
+    foreach my $elb_name (@{$self->{elb_name}}) {
+        my $metric_results = $options{custom}->cloudwatch_get_metrics(
+            region => $self->{option_results}->{region},
+            namespace => 'AWS/ELB',
+            dimensions => [ { Name => 'LoadBalancerName', Value => $elb_name } ],
+            metrics => $self->{aws_metrics},
+            statistics => ['Sum'],
+            timeframe => $self->{option_results}->{timeframe},
+            period => $self->{option_results}->{period},
+        );
+	foreach my $elb_stat (keys %{$metric_results}) {
+	    my $value = $metric_results->{$elb_stat}->{points};
+	    $elb_stat =~ s/_/-/g;
+	    $self->{http_codes}->{$elb_name}->{display} = $elb_name;
+	    $self->{http_codes}->{$elb_name}->{$elb_stat} = $value;
+        }
     }
 
     if (scalar(keys %{$self->{http_codes}}) <= 0) {
@@ -132,6 +143,10 @@ perl /tmp/work_sbo_aws/centreon-plugins/centreon_plugins.pl --plugin=cloud::aws:
 =item B<--region>
 
 Set the region name (Required).
+
+=item B<--elb-name>
+
+Set the elb name (Required). Can be multiple
 
 =item B<--filter-metric>
 
