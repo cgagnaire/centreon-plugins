@@ -213,8 +213,7 @@ sub ec2_get_instances_status {
         my $instances = $ec2->DescribeInstanceStatus(DryRun => 0, IncludeAllInstances => 1);
         
         foreach (@{$instances->{InstanceStatuses}}) {
-            $instance_results->{$_->{InstanceId}} = { state => $_->{InstanceState}->{Name}, 
-                                                      code => => $_->{InstanceState}->{Code}, 
+            $instance_results->{$_->{InstanceId}} = { state => $_->{InstanceState}->{Name},
                                                       status => => $_->{InstanceStatus}->{Status} };
         }
     };
@@ -226,23 +225,34 @@ sub ec2_get_instances_status {
     return $instance_results;
 }
 
-sub ec2_get_instances {
+sub ec2_list_resources {
     my ($self, %options) = @_;
     
-    my $instance_results = {};
+    my $resource_results = [];
     eval {
         my $ec2 = Paws->service('EC2', region => $options{region});
-        my $instances = $ec2->DescribeInstances(DryRun => 0);
+        my $list_instances = $ec2->DescribeInstances(DryRun => 0);
         
-        foreach my $reservation (@{$instances->{Reservations}}) {
+        foreach my $reservation (@{$list_instances->{Reservations}}) {
             foreach my $instance (@{$reservation->{Instances}}) {
-                # use Data::Dumper;
-                # print Dumper $instance;
-                $instance_results->{$instance->{InstanceId}} = { state => $instance->{State}->{Name}, 
-                                                                 code => => $instance->{State}->{Code},
-                                                                 availabilityzone => => $instance->{Placement}->{AvailabilityZone},
-                                                                 instancetype => => $instance->{InstanceType},
-                                                                 name => => $instance->{Tags}->{Name} };
+                foreach my $tag (@{$instance->{Tags}}) {
+                    my %already = map { $_->{Name} => $_ } @{$resource_results};
+                    if ($tag->{Key} eq "aws:autoscaling:groupName") {
+                        next if (defined($already{$tag->{Value}}));
+                        push @{$resource_results}, { 
+                            Name => $tag->{Value},
+                            Type => 'asg',
+                        };
+                    }
+                }
+                push @{$resource_results}, { 
+                    Name => $instance->{InstanceId},
+                    Type => 'instance',
+                    AvailabilityZone => $instance->{Placement}->{AvailabilityZone},
+                    InstanceType => $instance->{InstanceType},
+                    State => $instance->{State}->{Name},
+                };
+                
             }
         }
     };
@@ -251,9 +261,7 @@ sub ec2_get_instances {
         $self->{output}->option_exit();
     }
     
-    use Data::Dumper;
-    print Dumper $instance_results;
-    # return $instance_results;
+    return $resource_results;
 }
 
 sub rds_get_instances_status {
@@ -273,6 +281,57 @@ sub rds_get_instances_status {
     }
     
     return $instance_results;
+}
+
+sub rds_list_instances {
+    my ($self, %options) = @_;
+    
+    my $instance_results = [];
+    eval {
+        my $rds = Paws->service('RDS', region => $options{region});
+        my $list_instances = $rds->DescribeDBInstances();
+        
+        foreach my $instance (@{$list_instances->{DBInstances}}) {
+            push @{$instance_results}, {
+                Name => $instance->{DBInstanceIdentifier},
+                AvailabilityZone => $instance->{AvailabilityZone},
+                Engine => $instance->{Engine},
+                StorageType => $instance->{StorageType},
+                DBInstanceStatus => $instance->{DBInstanceStatus},
+            };
+        }
+    };
+    if ($@) {
+        $self->{output}->add_option_msg(short_msg => "error: $@");
+        $self->{output}->option_exit();
+    }
+    
+    return $instance_results;
+}
+
+sub rds_list_clusters {
+    my ($self, %options) = @_;
+    
+    my $cluster_results = [];
+    eval {
+        my $rds = Paws->service('RDS', region => $options{region});
+        my $list_clusters = $rds->DescribeDBClusters();
+        
+        foreach my $cluster (@{$list_clusters->{DBClusters}}) {
+            push @{$cluster_results}, {
+                Name => $cluster->{DBClusterIdentifier},
+                DatabaseName => $cluster->{DatabaseName},
+                Engine => $cluster->{Engine},
+                Status => $cluster->{Status},
+            };
+        }
+    };
+    if ($@) {
+        $self->{output}->add_option_msg(short_msg => "error: $@");
+        $self->{output}->option_exit();
+    }
+    
+    return $cluster_results;
 }
 
 1;

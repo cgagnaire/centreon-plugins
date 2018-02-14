@@ -18,7 +18,7 @@
 # limitations under the License.
 #
 
-package cloud::aws::ec2::mode::disk;
+package cloud::aws::rds::mode::diskio;
 
 use base qw(centreon::plugins::templates::counter);
 
@@ -26,8 +26,8 @@ use strict;
 use warnings;
 
 my %map_type = (
-    "instance" => "InstanceId",
-    "asg" => "AutoScalingGroupName",
+    "instance" => "DBInstanceIdentifier",
+    "cluster"  => "DBClusterIdentifier",
 );
 
 my $instance_mode;
@@ -116,7 +116,7 @@ sub set_counters {
     ];
 
     foreach my $statistic ('minimum', 'maximum', 'average', 'sum') {
-        foreach my $metric ('DiskReadBytes', 'DiskWriteBytes') {
+        foreach my $metric ('ReadThroughput', 'WriteThroughput') {
             my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
                                 key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'stat' } ],
                                 closure_custom_calc => $self->can('custom_metric_calc'),
@@ -128,7 +128,7 @@ sub set_counters {
                         };
             push @{$self->{maps_counters}->{metric}}, $entry;
         }
-        foreach my $metric ('DiskReadOps', 'DiskWriteOps') {
+        foreach my $metric ('ReadIOPS', 'WriteIOPS') {
             my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
                                 key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'stat' } ],
                                 closure_custom_calc => $self->can('custom_metric_calc'),
@@ -153,7 +153,7 @@ sub new {
                                 {
                                     "region:s"        => { name => 'region' },
                                     "type:s"	      => { name => 'type' },
-                                    "instance:s@"	  => { name => 'instance' },
+                                    "name:s@"	      => { name => 'name' },
                                     "filter-metric:s" => { name => 'filter_metric' },
                                     "statistic:s@"    => { name => 'statistic' },
                                     "timeframe:s"     => { name => 'timeframe', default => 600 },
@@ -173,18 +173,24 @@ sub check_options {
         $self->{output}->option_exit();
     }
 
-    if (!defined($self->{option_results}->{type}) || $self->{option_results}->{type} eq ''
-        || $self->{option_results}->{type} ne 'asg' && $self->{option_results}->{type} ne 'instance') {
+    if (!defined($self->{option_results}->{type}) || $self->{option_results}->{type} eq '') {
         $self->{output}->add_option_msg(short_msg => "Need to specify --type option.");
         $self->{output}->option_exit();
     }
 
-    if (!defined($self->{option_results}->{instance}) || $self->{option_results}->{instance} eq '') {
-        $self->{output}->add_option_msg(short_msg => "Need to specify --instance option.");
+    if ($self->{option_results}->{type} ne 'cluster' && $self->{option_results}->{type} ne 'instance') {
+        $self->{output}->output_add(severity => 'OK',
+                                    short_msg => "Instance type '" . $self->{option_results}->{type} . "' is not handled for this mode");
+        $self->{output}->display(force_ignore_perfdata => 1);
+        $self->{output}->exit();
+    }
+
+    if (!defined($self->{option_results}->{name}) || $self->{option_results}->{name} eq '') {
+        $self->{output}->add_option_msg(short_msg => "Need to specify --name option.");
         $self->{output}->option_exit();
     }
 
-    foreach my $instance (@{$self->{option_results}->{instance}}) {
+    foreach my $instance (@{$self->{option_results}->{name}}) {
         if ($instance ne '') {
             push @{$self->{aws_instance}}, $instance;
         }
@@ -200,7 +206,7 @@ sub check_options {
         }
     }
 
-    foreach my $metric ('DiskReadBytes', 'DiskWriteBytes', 'DiskReadOps', 'DiskWriteOps') {
+    foreach my $metric ('ReadThroughput', 'WriteThroughput', 'ReadIOPS', 'WriteIOPS') {
         next if (defined($self->{option_results}->{filter_metric}) && $self->{option_results}->{filter_metric} ne ''
             && $metric !~ /$self->{option_results}->{filter_metric}/);
 
@@ -217,7 +223,7 @@ sub manage_selection {
     foreach my $instance (@{$self->{aws_instance}}) {
         $metric_results{$instance} = $options{custom}->cloudwatch_get_metrics(
             region => $self->{option_results}->{region},
-            namespace => 'AWS/EC2',
+            namespace => 'AWS/RDS',
             dimensions => [ { Name => $map_type{$self->{option_results}->{type}}, Value => $instance } ],
             metrics => $self->{aws_metrics},
             statistics => $self->{aws_statistics},
@@ -251,10 +257,14 @@ __END__
 
 =head1 MODE
 
-Check EC2 Auto Scaling Group disk metrics.
+Check RDS instances disk IO metrics.
 
 Example: 
-perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=ec2-asg-disk --region='eu-west-1' --type='asg' --instance='centreon-middleware' --filter-metric='Read' --statistic='sum' ---critical-diskreadops-sum='10' --verbose
+perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=rds-diskio --region='eu-west-1'
+--type='cluster' --name='centreon-db-ppd-cluster' --filter-metric='Read' --statistic='sum'
+---critical-readiops-sum='10' --verbose
+
+Works for the following database engines : mysql, mariadb.
 
 =over 8
 
@@ -264,16 +274,16 @@ Set the region name (Required).
 
 =item B<--type>
 
-Set the instance type (Required) (Can be: 'asg', 'instance').
+Set the instance type (Required) (Can be: 'cluster', 'instance').
 
-=item B<--instance>
+=item B<--name>
 
 Set the instance name (Required) (Can be multiple).
 
 =item B<--filter-metric>
 
-Filter metrics (Can be: 'NetworkIn', 'NetworkOut', 
-'NetworkPacketsIn', 'NetworkPacketsOut') 
+Filter metrics (Can be: 'ReadThroughput', 'WriteThroughput',
+'ReadIOPS', 'WriteIOPS') 
 (Can be a regexp).
 
 =item B<--statistic>
@@ -291,15 +301,13 @@ Set timeframe in seconds (Default: 600).
 
 =item B<--warning-$metric$-$statistic$>
 
-Thresholds warning ($metric$ can be: 'networkin', 'networkout', 
-'networkpacketsin', 'networkpacketsout', 
-$statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
+Thresholds warning ($metric$ can be: 'readthroughput', 'writethroughput',
+'readiops', 'writeiops', $statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
 
 =item B<--critical-$metric$-$statistic$>
 
-Thresholds critical ($metric$ can be: 'networkin', 'networkout', 
-'networkpacketsin', 'networkpacketsout', 
-$statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
+Thresholds critical ($metric$ can be: 'readthroughput', 'writethroughput',
+'readiops', 'writeiops', $statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
 
 =back
 

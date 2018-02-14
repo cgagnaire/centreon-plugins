@@ -18,7 +18,7 @@
 # limitations under the License.
 #
 
-package cloud::aws::ec2::mode::network;
+package cloud::aws::ec2::mode::diskio;
 
 use base qw(centreon::plugins::templates::counter);
 
@@ -58,7 +58,7 @@ sub custom_metric_threshold {
     return $exit;
 }
 
-sub custom_traffic_perfdata {
+sub custom_usage_perfdata {
     my ($self, %options) = @_;
 
     $self->{output}->perfdata_add(label => lc($self->{result_values}->{metric}) . "_" . lc($self->{result_values}->{stat}) . "_" . lc($self->{result_values}->{display}),
@@ -69,7 +69,7 @@ sub custom_traffic_perfdata {
                                  );
 }
 
-sub custom_traffic_output {
+sub custom_usage_output {
     my ($self, %options) = @_;
     my $msg = "";
 
@@ -83,26 +83,26 @@ sub custom_traffic_output {
     return $msg;
 }
 
-sub custom_packets_perfdata {
+sub custom_ops_perfdata {
     my ($self, %options) = @_;
 
     $self->{output}->perfdata_add(label => lc($self->{result_values}->{metric}) . "_" . lc($self->{result_values}->{stat}) . "_" . lc($self->{result_values}->{display}),
-                                  unit => defined($instance_mode->{option_results}->{per_sec}) ? 'packets/s' : 'packets',
+                                  unit => defined($instance_mode->{option_results}->{per_sec}) ? 'ops/s' : 'ops',
                                   value => sprintf("%.2f", defined($instance_mode->{option_results}->{per_sec}) ? $self->{result_values}->{value_per_sec} : $self->{result_values}->{value}),
                                   warning => $self->{perfdata}->get_perfdata_for_output(label => 'warning-' . lc($self->{result_values}->{metric}) . "-" . lc($self->{result_values}->{stat})),
                                   critical => $self->{perfdata}->get_perfdata_for_output(label => 'critical-' . lc($self->{result_values}->{metric}) . "-" . lc($self->{result_values}->{stat})),
                                  );
 }
 
-sub custom_packets_output {
+sub custom_ops_output {
     my ($self, %options) = @_;
 
     my $msg ="";
 
     if (defined($instance_mode->{option_results}->{per_sec})) {
-        $msg = sprintf("%s: %.2f packets/s", $self->{result_values}->{metric}, $self->{result_values}->{value_per_sec});
+        $msg = sprintf("%s: %.2f ops/s", $self->{result_values}->{metric}, $self->{result_values}->{value_per_sec});
     } else {
-        $msg = sprintf("%s: %.2f packets", $self->{result_values}->{metric}, $self->{result_values}->{value});
+        $msg = sprintf("%s: %.2f ops", $self->{result_values}->{metric}, $self->{result_values}->{value});
     }
  
     return $msg;
@@ -112,29 +112,29 @@ sub set_counters {
     my ($self, %options) = @_;
     
     $self->{maps_counters_type} = [
-        { name => 'metric', type => 1, cb_prefix_output => 'prefix_metric_output', message_multiple => "All network metrics are ok", skipped_code => { -10 => 1 } },
+        { name => 'metric', type => 1, cb_prefix_output => 'prefix_metric_output', message_multiple => "All disk metrics are ok", skipped_code => { -10 => 1 } },
     ];
 
     foreach my $statistic ('minimum', 'maximum', 'average', 'sum') {
-        foreach my $metric ('NetworkIn', 'NetworkOut') {
+        foreach my $metric ('DiskReadBytes', 'DiskWriteBytes') {
             my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
                                 key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'stat' } ],
                                 closure_custom_calc => $self->can('custom_metric_calc'),
                                 closure_custom_calc_extra_options => { metric => $metric, stat => $statistic },
-                                closure_custom_output => $self->can('custom_traffic_output'),
-                                closure_custom_perfdata => $self->can('custom_traffic_perfdata'),
+                                closure_custom_output => $self->can('custom_usage_output'),
+                                closure_custom_perfdata => $self->can('custom_usage_perfdata'),
                                 closure_custom_threshold_check => $self->can('custom_metric_threshold'),
                             }
                         };
             push @{$self->{maps_counters}->{metric}}, $entry;
         }
-        foreach my $metric ('NetworkPacketsIn', 'NetworkPacketsOut') {
+        foreach my $metric ('DiskReadOps', 'DiskWriteOps') {
             my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
                                 key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'stat' } ],
                                 closure_custom_calc => $self->can('custom_metric_calc'),
                                 closure_custom_calc_extra_options => { metric => $metric, stat => $statistic },
-                                closure_custom_output => $self->can('custom_packets_output'),
-                                closure_custom_perfdata => $self->can('custom_packets_perfdata'),
+                                closure_custom_output => $self->can('custom_ops_output'),
+                                closure_custom_perfdata => $self->can('custom_ops_perfdata'),
                                 closure_custom_threshold_check => $self->can('custom_metric_threshold'),
                             }
                         };
@@ -200,7 +200,7 @@ sub check_options {
         }
     }
 
-    foreach my $metric ('NetworkIn', 'NetworkOut', 'NetworkPacketsIn', 'NetworkPacketsOut') {
+    foreach my $metric ('DiskReadBytes', 'DiskWriteBytes', 'DiskReadOps', 'DiskWriteOps') {
         next if (defined($self->{option_results}->{filter_metric}) && $self->{option_results}->{filter_metric} ne ''
             && $metric !~ /$self->{option_results}->{filter_metric}/);
 
@@ -251,12 +251,12 @@ __END__
 
 =head1 MODE
 
-Check EC2 instances network metrics.
+Check EC2 instances disk IO metrics.
 
 Example: 
-perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=ec2-network --region='eu-west-1'
---type='asg' --name='centreon-middleware' --filter-metric='Packets' --statistic='sum'
---critical-networkpacketsout-sum='10' --verbose
+perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=ec2-diskio --region='eu-west-1'
+--type='asg' --name='centreon-middleware' --filter-metric='Read' --statistic='sum' --critical-diskreadops-sum='10'
+--verbose
 
 =over 8
 
@@ -274,8 +274,8 @@ Set the instance name (Required) (Can be multiple).
 
 =item B<--filter-metric>
 
-Filter metrics (Can be: 'NetworkIn', 'NetworkOut', 
-'NetworkPacketsIn', 'NetworkPacketsOut') 
+Filter metrics (Can be: 'DiskReadBytes', 'DiskWriteBytes',
+'DiskReadOps', 'DiskWriteOps') 
 (Can be a regexp).
 
 =item B<--statistic>

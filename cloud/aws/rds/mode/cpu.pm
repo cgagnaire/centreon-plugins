@@ -18,7 +18,7 @@
 # limitations under the License.
 #
 
-package cloud::aws::ec2::mode::cpu;
+package cloud::aws::rds::mode::cpu;
 
 use base qw(centreon::plugins::templates::counter);
 
@@ -26,8 +26,8 @@ use strict;
 use warnings;
 
 my %map_type = (
-    "instance" => "InstanceId",
-    "asg" => "AutoScalingGroupName",
+    "instance" => "DBInstanceIdentifier",
+    "cluster"  => "DBClusterIdentifier",
 );
 
 sub prefix_metric_output {
@@ -44,7 +44,7 @@ sub set_counters {
     ];
 
     foreach my $statistic ('minimum', 'maximum', 'average', 'sum') {
-        foreach my $metric ('CPUCreditBalance', 'CPUCreditUsage', 'CPUSurplusCreditBalance', 'CPUSurplusCreditsCharged') {
+        foreach my $metric ('CPUCreditBalance', 'CPUCreditUsage') {
             my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
                                 key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'type' }, { name => 'stat' } ],
                                 output_template => $metric . ': %.3f',
@@ -100,10 +100,16 @@ sub check_options {
         $self->{output}->option_exit();
     }
 
-    if (!defined($self->{option_results}->{type}) || $self->{option_results}->{type} eq ''
-        || $self->{option_results}->{type} ne 'asg' && $self->{option_results}->{type} ne 'instance') {
+    if (!defined($self->{option_results}->{type}) || $self->{option_results}->{type} eq '') {
         $self->{output}->add_option_msg(short_msg => "Need to specify --type option.");
         $self->{output}->option_exit();
+    }
+
+    if ($self->{option_results}->{type} ne 'cluster' && $self->{option_results}->{type} ne 'instance') {
+        $self->{output}->output_add(severity => 'OK',
+                                    short_msg => "Instance type '" . $self->{option_results}->{type} . "' is not handled for this mode");
+        $self->{output}->display(force_ignore_perfdata => 1);
+        $self->{output}->exit();
     }
 
     if (!defined($self->{option_results}->{name}) || $self->{option_results}->{name} eq '') {
@@ -127,7 +133,7 @@ sub check_options {
         }
     }
 
-    foreach my $metric ('CPUCreditBalance', 'CPUCreditUsage', 'CPUSurplusCreditBalance', 'CPUSurplusCreditsCharged', 'CPUUtilization') {
+    foreach my $metric ('CPUCreditBalance', 'CPUCreditUsage', 'CPUUtilization') {
         next if (defined($self->{option_results}->{filter_metric}) && $self->{option_results}->{filter_metric} ne ''
             && $metric !~ /$self->{option_results}->{filter_metric}/);
 
@@ -142,7 +148,7 @@ sub manage_selection {
     foreach my $instance (@{$self->{aws_instance}}) {
         $metric_results{$instance} = $options{custom}->cloudwatch_get_metrics(
             region => $self->{option_results}->{region},
-            namespace => 'AWS/EC2',
+            namespace => 'AWS/RDS',
             dimensions => [ { Name => $map_type{$self->{option_results}->{type}}, Value => $instance } ],
             metrics => $self->{aws_metrics},
             statistics => $self->{aws_statistics},
@@ -176,12 +182,14 @@ __END__
 
 =head1 MODE
 
-Check EC2 instances CPU metrics.
+Check RDS instances CPU metrics.
 
 Example: 
-perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=ec2-cpu --region='eu-west-1'
---type='asg' --name='centreon-middleware' --filter-metric='Credit' --statistic='average'
+perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=rds-cpu --region='eu-west-1'
+--type='cluster' --name='centreon-db-ppd-cluster' --filter-metric='Credit' --statistic='average'
 --critical-cpucreditusage-average='10' --verbose
+
+Works for the following database engines : aurora, mysql, mariadb.
 
 =over 8
 
@@ -191,7 +199,7 @@ Set the region name (Required).
 
 =item B<--type>
 
-Set the instance type (Required) (Can be: 'asg', 'instance').
+Set the instance type (Required) (Can be: 'cluster', 'instance').
 
 =item B<--name>
 
@@ -199,8 +207,7 @@ Set the instance name (Required) (Can be multiple).
 
 =item B<--filter-metric>
 
-Filter metrics (Can be: 'CPUCreditBalance', 'CPUCreditUsage', 
-'CPUSurplusCreditBalance', 'CPUSurplusCreditsCharged', 'CPUUtilization') 
+Filter metrics (Can be: 'CPUCreditBalance', 'CPUCreditUsage', CPUUtilization') 
 (Can be a regexp).
 
 =item B<--statistic>
@@ -218,14 +225,12 @@ Set timeframe in seconds (Default: 600).
 
 =item B<--warning-$metric$-$statistic$>
 
-Thresholds warning ($metric$ can be: 'cpucreditusage', 'cpucreditbalance', 
-'cpusurpluscreditbalance', 'cpusurpluscreditscharged', 'cpuutilization', 
+Thresholds warning ($metric$ can be: 'cpucreditusage', 'cpucreditbalance', 'cpuutilization', 
 $statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
 
 =item B<--critical-$metric$-$statistic$>
 
-Thresholds critical ($metric$ can be: 'cpucreditusage', 'cpucreditbalance', 
-'cpusurpluscreditbalance', 'cpusurpluscreditscharged', 'cpuutilization', 
+Thresholds critical ($metric$ can be: 'cpucreditusage', 'cpucreditbalance', 'cpuutilization', 
 $statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
 
 =back

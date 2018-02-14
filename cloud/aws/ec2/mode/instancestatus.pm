@@ -56,7 +56,7 @@ sub custom_status_threshold {
 sub custom_status_output {
     my ($self, %options) = @_;
     
-    my $msg = sprintf('state: %s [code: %s], status: %s', $self->{result_values}->{state}, $self->{result_values}->{code}, $self->{result_values}->{status});
+    my $msg = sprintf('state: %s, status: %s', $self->{result_values}->{state}, $self->{result_values}->{status});
     return $msg;
 }
 
@@ -64,7 +64,6 @@ sub custom_status_calc {
     my ($self, %options) = @_;
     
     $self->{result_values}->{state} = $options{new_datas}->{$self->{instance} . '_state'};
-    $self->{result_values}->{code} = $options{new_datas}->{$self->{instance} . '_code'};
     $self->{result_values}->{status} = $options{new_datas}->{$self->{instance} . '_status'};
     $self->{result_values}->{display} = $options{new_datas}->{$self->{instance} . '_display'};
     return 0;
@@ -131,7 +130,7 @@ sub set_counters {
     
     $self->{maps_counters}->{aws_instances} = [
         { label => 'status', threshold => 0, set => {
-                key_values => [ { name => 'state' }, { name => 'code' }, { name => 'status' }, { name => 'display' } ],
+                key_values => [ { name => 'state' }, { name => 'status' }, { name => 'display' } ],
                 closure_custom_calc => $self->can('custom_status_calc'),
                 closure_custom_output => $self->can('custom_status_output'),
                 closure_custom_perfdata => sub { return 0; },
@@ -200,8 +199,7 @@ sub manage_selection {
         pending => 0, running => 0, 'shutting-down' => 0, terminated => 0, stopping => 0, stopped => 0,
     };
     $self->{aws_instances} = {};
-    # my $result = $options{custom}->ec2_get_instances_status(region => $self->{option_results}->{region});
-    my $result = $options{custom}->ec2_get_instances(region => $self->{option_results}->{region});
+    my $result = $options{custom}->ec2_get_instances_status(region => $self->{option_results}->{region});
     foreach my $instance_id (keys %{$result}) {
         if (defined($self->{option_results}->{filter_instanceid}) && $self->{option_results}->{filter_instanceid} ne '' &&
             $instance_id !~ /$self->{option_results}->{filter_instanceid}/) {
@@ -212,7 +210,6 @@ sub manage_selection {
         $self->{aws_instances}->{$instance_id} = { 
             display => $instance_id, 
             state => $result->{$instance_id}->{state},
-            code => $result->{$instance_id}->{code},
             status => $result->{$instance_id}->{status},
         };
         $self->{global}->{$result->{$instance_id}->{state}}++;

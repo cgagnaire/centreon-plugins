@@ -112,8 +112,8 @@ sub new {
     $options{options}->add_options(arguments =>
                                 {
                                     "region:s"              => { name => 'region' },
-                                    "type:s"	      => { name => 'type' },
-                                    "instance:s@"	  => { name => 'instance' },
+                                    "type:s"	            => { name => 'type' },
+                                    "name:s@"	            => { name => 'name' },
                                     "warning-status:s"      => { name => 'warning_status', default => '' },
                                     "critical-status:s"     => { name => 'critical_status', default => '%{status} =~ /failed/i' },
                                 });
@@ -136,12 +136,12 @@ sub check_options {
         $self->{output}->option_exit();
     }
 
-    if (!defined($self->{option_results}->{instance}) || $self->{option_results}->{instance} eq '') {
-        $self->{output}->add_option_msg(short_msg => "Need to specify --instance option.");
+    if (!defined($self->{option_results}->{name}) || $self->{option_results}->{name} eq '') {
+        $self->{output}->add_option_msg(short_msg => "Need to specify --name option.");
         $self->{output}->option_exit();
     }
 
-    foreach my $instance (@{$self->{option_results}->{instance}}) {
+    foreach my $instance (@{$self->{option_results}->{name}}) {
         if ($instance ne '') {
             push @{$self->{aws_instance}}, $instance;
         }
@@ -205,10 +205,11 @@ __END__
 
 =head1 MODE
 
-Check EC2 Auto Scaling Group status metrics.
+Check EC2 instances status metrics.
 
 Example: 
-perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=ec2-asg-status --region='eu-west-1' --type='asg' --instancee='centreon-middleware' --verbose
+perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=ec2-status --region='eu-west-1'
+--type='asg' --name='centreon-middleware' --verbose
 
 =over 8
 
@@ -220,7 +221,7 @@ Set the region name (Required).
 
 Set the instance type (Required) (Can be: 'asg', 'instance').
 
-=item B<--instance>
+=item B<--name>
 
 Set the instance name (Required) (Can be multiple).
 

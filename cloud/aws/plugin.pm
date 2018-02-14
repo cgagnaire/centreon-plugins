@@ -35,15 +35,21 @@ sub new {
         'cloudwatch-get-metrics'    => 'cloud::aws::cloudwatch::mode::getmetrics',
         'cloudwatch-list-metrics'   => 'cloud::aws::cloudwatch::mode::listmetrics',
         'ec2-cpu'                   => 'cloud::aws::ec2::mode::cpu',
-        'ec2-disk'                  => 'cloud::aws::ec2::mode::disk',
+        'ec2-diskio'                => 'cloud::aws::ec2::mode::diskio',
         'ec2-network'               => 'cloud::aws::ec2::mode::network',
         'ec2-status'                => 'cloud::aws::ec2::mode::status',
         'ec2-instance-status'       => 'cloud::aws::ec2::mode::instancestatus',
+        'ec2-list-asg'              => 'cloud::aws::ec2::mode::listasg',
+        'ec2-list-instances'        => 'cloud::aws::ec2::mode::listinstances',
         'elb-http-codes'            => 'cloud::aws::elb::mode::httpcodes',
         'elb-instance-health'       => 'cloud::aws::elb::mode::instancehealth',
         'elb-performances'          => 'cloud::aws::elb::mode::performances',
         'elb-queues'                => 'cloud::aws::elb::mode::queues',
+        'rds-cpu'                   => 'cloud::aws::rds::mode::cpu',
+        'rds-diskio'                => 'cloud::aws::rds::mode::diskio',
         'rds-instance-status'       => 'cloud::aws::rds::mode::instancestatus',
+        'rds-list-clusters'         => 'cloud::aws::rds::mode::listclusters',
+        'rds-list-instances'        => 'cloud::aws::rds::mode::listinstances',
     );
 
     $self->{custom_modes}{paws} = 'cloud::aws::custom::paws';
