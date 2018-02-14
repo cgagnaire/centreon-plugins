@@ -224,9 +224,7 @@ sub manage_selection {
             timeframe => $self->{option_results}->{timeframe},
             period => $self->{option_results}->{period},
         );
-    }
-    
-    foreach my $instance (keys %metric_results) {
+        
         foreach my $metric (keys $metric_results{$instance}) {
             foreach my $stat ('minimum', 'maximum', 'average', 'sum') {
                 next if (!defined($metric_results{$instance}->{$metric}->{$stat}));
@@ -302,6 +300,10 @@ $statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
 Thresholds critical ($metric$ can be: 'networkin', 'networkout', 
 'networkpacketsin', 'networkpacketsout', 
 $statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
+
+=item B<--per-sec>
+
+Change the data to be unit/sec.
 
 =back
 

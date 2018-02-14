@@ -149,9 +149,7 @@ sub manage_selection {
             timeframe => $self->{option_results}->{timeframe},
             period => $self->{option_results}->{period},
         );
-    }
-    
-    foreach my $instance (keys %metric_results) {
+        
         foreach my $metric (keys $metric_results{$instance}) {
             foreach my $stat ('minimum', 'maximum', 'average', 'sum') {
                 next if (!defined($metric_results{$instance}->{$metric}->{$stat}));

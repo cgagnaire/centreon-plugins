@@ -151,14 +151,14 @@ sub new {
     $self->{version} = '1.0';
     $options{options}->add_options(arguments =>
                                 {
-                                    "region:s"        => { name => 'region' },
-                                    "type:s"	      => { name => 'type' },
-                                    "name:s@"	      => { name => 'name' },
-                                    "filter-metric:s" => { name => 'filter_metric' },
-                                    "statistic:s@"    => { name => 'statistic' },
-                                    "timeframe:s"     => { name => 'timeframe', default => 600 },
-                                    "period:s"        => { name => 'period', default => 60 },
-				                    "per-sec"	      => { name => 'per_sec' },
+                                    "region:s"         => { name => 'region' },
+                                    "type:s"           => { name => 'type' },
+                                    "name:s@"          => { name => 'name' },
+                                    "filter-metric:s"  => { name => 'filter_metric' },
+                                    "statistic:s@"     => { name => 'statistic' },
+                                    "timeframe:s"      => { name => 'timeframe', default => 600 },
+                                    "period:s"         => { name => 'period', default => 60 },
+				                    "per-sec"	       => { name => 'per_sec' },
                                 });
     
     return $self;
@@ -224,9 +224,7 @@ sub manage_selection {
             timeframe => $self->{option_results}->{timeframe},
             period => $self->{option_results}->{period},
         );
-    }
-    
-    foreach my $instance (keys %metric_results) {
+        
         foreach my $metric (keys $metric_results{$instance}) {
             foreach my $stat ('minimum', 'maximum', 'average', 'sum') {
                 next if (!defined($metric_results{$instance}->{$metric}->{$stat}));
@@ -302,6 +300,10 @@ $statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
 Thresholds critical ($metric$ can be: 'networkin', 'networkout', 
 'networkpacketsin', 'networkpacketsout', 
 $statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
+
+=item B<--per-sec>
+
+Change the data to be unit/sec.
 
 =back
 

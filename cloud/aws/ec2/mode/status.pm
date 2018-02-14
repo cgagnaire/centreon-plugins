@@ -181,9 +181,7 @@ sub manage_selection {
             timeframe => '90',
             period => '60',
         );
-    }
-    
-    foreach my $instance (keys %metric_results) {
+        
         foreach my $metric (keys $metric_results{$instance}) {
             next if (!defined($metric_results{$instance}->{$metric}->{average}));
 

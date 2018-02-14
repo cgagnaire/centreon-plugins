@@ -42,7 +42,6 @@ sub custom_metric_calc {
     my ($self, %options) = @_;
     
     $self->{result_values}->{value} = $options{new_datas}->{$self->{instance} . '_' . $options{extra_options}->{metric} . '_' . $options{extra_options}->{stat}};
-    $self->{result_values}->{value_per_sec} = $self->{result_values}->{value} / $instance_mode->{option_results}->{timeframe};
     $self->{result_values}->{stat} = $options{extra_options}->{stat};
     $self->{result_values}->{metric} = $options{extra_options}->{metric};
     $self->{result_values}->{display} = $options{new_datas}->{$self->{instance} . '_display'};
@@ -52,7 +51,7 @@ sub custom_metric_calc {
 sub custom_metric_threshold {
     my ($self, %options) = @_;
 
-    my $exit = $self->{perfdata}->threshold_check(value => defined($instance_mode->{option_results}->{per_sec}) ?  $self->{result_values}->{value_per_sec} : $self->{result_values}->{value},
+    my $exit = $self->{perfdata}->threshold_check(value => $self->{result_values}->{value},
                                                   threshold => [ { label => 'critical-' . lc($self->{result_values}->{metric}) . "-" . lc($self->{result_values}->{stat}), exit_litteral => 'critical' },
                                                                  { label => 'warning-' . lc($self->{result_values}->{metric}) . "-" . lc($self->{result_values}->{stat}), exit_litteral => 'warning' } ]);
     return $exit;
@@ -62,8 +61,8 @@ sub custom_usage_perfdata {
     my ($self, %options) = @_;
 
     $self->{output}->perfdata_add(label => lc($self->{result_values}->{metric}) . "_" . lc($self->{result_values}->{stat}) . "_" . lc($self->{result_values}->{display}),
-				                  unit => defined($instance_mode->{option_results}->{per_sec}) ? 'B/s' : 'B',
-                                  value => sprintf("%.2f", defined($instance_mode->{option_results}->{per_sec}) ? $self->{result_values}->{value_per_sec} : $self->{result_values}->{value}),
+				                  unit => 'B/s',
+                                  value => sprintf("%.2f", $self->{result_values}->{value}),
                                   warning => $self->{perfdata}->get_perfdata_for_output(label => 'warning-' . lc($self->{result_values}->{metric}) . "-" . lc($self->{result_values}->{stat})),
                                   critical => $self->{perfdata}->get_perfdata_for_output(label => 'critical-' . lc($self->{result_values}->{metric}) . "-" . lc($self->{result_values}->{stat})),
                                  );
@@ -71,40 +70,29 @@ sub custom_usage_perfdata {
 
 sub custom_usage_output {
     my ($self, %options) = @_;
-    my $msg = "";
-
-    if (defined($instance_mode->{option_results}->{per_sec})) {
-	my ($value, $unit) = $self->{perfdata}->change_bytes(value => $self->{result_values}->{value_per_sec});
-        $msg = $self->{result_values}->{metric}  . ": " . $value . $unit . "/s"; 
-    } else {
-        my ($value, $unit) = $self->{perfdata}->change_bytes(value => $self->{result_values}->{value});
-        $msg = $self->{result_values}->{metric}  . ": " . $value . $unit;
-    }
+    
+    my ($value, $unit) = $self->{perfdata}->change_bytes(value => $self->{result_values}->{value});
+    my $msg = $self->{result_values}->{metric}  . ": " . $value . $unit . "/s"; 
+    
     return $msg;
 }
 
-sub custom_ops_perfdata {
+sub custom_iops_perfdata {
     my ($self, %options) = @_;
 
     $self->{output}->perfdata_add(label => lc($self->{result_values}->{metric}) . "_" . lc($self->{result_values}->{stat}) . "_" . lc($self->{result_values}->{display}),
-                                  unit => defined($instance_mode->{option_results}->{per_sec}) ? 'ops/s' : 'ops',
-                                  value => sprintf("%.2f", defined($instance_mode->{option_results}->{per_sec}) ? $self->{result_values}->{value_per_sec} : $self->{result_values}->{value}),
+                                  unit => 'iops/s',
+                                  value => sprintf("%.2f", $self->{result_values}->{value}),
                                   warning => $self->{perfdata}->get_perfdata_for_output(label => 'warning-' . lc($self->{result_values}->{metric}) . "-" . lc($self->{result_values}->{stat})),
                                   critical => $self->{perfdata}->get_perfdata_for_output(label => 'critical-' . lc($self->{result_values}->{metric}) . "-" . lc($self->{result_values}->{stat})),
                                  );
 }
 
-sub custom_ops_output {
+sub custom_iops_output {
     my ($self, %options) = @_;
 
-    my $msg ="";
-
-    if (defined($instance_mode->{option_results}->{per_sec})) {
-        $msg = sprintf("%s: %.2f ops/s", $self->{result_values}->{metric}, $self->{result_values}->{value_per_sec});
-    } else {
-        $msg = sprintf("%s: %.2f ops", $self->{result_values}->{metric}, $self->{result_values}->{value});
-    }
- 
+    my $msg = sprintf("%s: %.2f iops/s", $self->{result_values}->{metric}, $self->{result_values}->{value});
+    
     return $msg;
 }
 
@@ -133,8 +121,8 @@ sub set_counters {
                                 key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'stat' } ],
                                 closure_custom_calc => $self->can('custom_metric_calc'),
                                 closure_custom_calc_extra_options => { metric => $metric, stat => $statistic },
-                                closure_custom_output => $self->can('custom_ops_output'),
-                                closure_custom_perfdata => $self->can('custom_ops_perfdata'),
+                                closure_custom_output => $self->can('custom_iops_output'),
+                                closure_custom_perfdata => $self->can('custom_iops_perfdata'),
                                 closure_custom_threshold_check => $self->can('custom_metric_threshold'),
                             }
                         };
@@ -158,7 +146,6 @@ sub new {
                                     "statistic:s@"    => { name => 'statistic' },
                                     "timeframe:s"     => { name => 'timeframe', default => 600 },
                                     "period:s"        => { name => 'period', default => 60 },
-				                    "per-sec"	      => { name => 'per_sec' },
                                 });
     
     return $self;
@@ -230,9 +217,7 @@ sub manage_selection {
             timeframe => $self->{option_results}->{timeframe},
             period => $self->{option_results}->{period},
         );
-    }
-    
-    foreach my $instance (keys %metric_results) {
+        
         foreach my $metric (keys $metric_results{$instance}) {
             foreach my $stat ('minimum', 'maximum', 'average', 'sum') {
                 next if (!defined($metric_results{$instance}->{$metric}->{$stat}));
@@ -262,7 +247,7 @@ Check RDS instances disk IO metrics.
 Example: 
 perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=rds-diskio --region='eu-west-1'
 --type='cluster' --name='centreon-db-ppd-cluster' --filter-metric='Read' --statistic='sum'
----critical-readiops-sum='10' --verbose
+--critical-readiops-sum='10' --verbose
 
 Works for the following database engines : mysql, mariadb.
 
