@@ -210,6 +210,8 @@ sub cloudwatch_list_metrics_set_cmd {
     
     return if (defined($self->{option_results}->{command_options}) && $self->{option_results}->{command_options} ne '');
     my $cmd_options = "cloudwatch list-metrics --region $options{region} --output json";
+    my $cmd_options .= " --namespace $options{namespace}" if defined($options{namespace});
+    my $cmd_options .= " --metric-name $options{metric}" if defined($options{metric});
     return $cmd_options; 
 }
 
@@ -268,7 +270,9 @@ sub ec2_get_instances_status {
     
     my $instance_results = {};
     foreach (@{$list_instances->{InstanceStatuses}}) {
-        $instance_results->{$_->{InstanceId}} = { state => $_->{InstanceState}->{Name} };
+        $instance_results->{$_->{InstanceId}} = { state => $_->{InstanceState}->{Name}, 
+                                                    code => => $_->{InstanceState}->{Code}, 
+                                                    status => => $_->{InstanceStatus}->{Status} };
     }
     
     return $instance_results;

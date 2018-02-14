@@ -35,6 +35,7 @@ sub new {
                                 {
                                 "region:s"      => { name => 'region' },
                                 "namespace:s"   => { name => 'namespace' },
+                                "metric:s"      => { name => 'metric' },
                                 });
 
     return $self;
@@ -53,7 +54,9 @@ sub check_options {
 sub manage_selection {
     my ($self, %options) = @_;
 
-    $self->{metrics} = $options{custom}->cloudwatch_list_metrics(region => $self->{option_results}->{region}, namespace => $self->{option_results}->{namespace});
+    $self->{metrics} = $options{custom}->cloudwatch_list_metrics(region => $self->{option_results}->{region},
+                                                                namespace => $self->{option_results}->{namespace},
+                                                                metric => $self->{option_results}->{metric});
 }
 
 sub get_dimensions_str {
@@ -120,6 +123,10 @@ Set the region name (Required).
 =item B<--namespace>
 
 Set cloudwatch namespace.
+
+=item B<--metric>
+
+Set cloudwatch metric.
 
 =back
 

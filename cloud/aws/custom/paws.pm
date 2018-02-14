@@ -176,9 +176,10 @@ sub cloudwatch_list_metrics {
     my $metric_results = [];
     eval {
         my $cw = Paws->service('CloudWatch', region => $options{region});
-        my %options = ();
-        $options{Namespace} = $options{namespace} if (defined($options{namespace}));
-        while ((my $list_metrics = $cw->ListMetrics(%options))) {
+        my %cw_options = ();
+        $cw_options{Namespace} = $options{namespace} if (defined($options{namespace}));
+        $cw_options{MetricName} = $options{metric} if (defined($options{metric}));
+        while ((my $list_metrics = $cw->ListMetrics(%cw_options))) {
             foreach (@{$list_metrics->{Metrics}}) {
                 my $dimensions = [];
                 foreach my $dimension (@{$_->{Dimensions}}) {
@@ -192,7 +193,7 @@ sub cloudwatch_list_metrics {
             }
             
             last if (!defined($list_metrics->{NextToken}));
-            $options{NextToken} = $list_metrics->{NextToken};
+            $cw_options{NextToken} = $list_metrics->{NextToken};
         }
     };
     if ($@) {
@@ -210,8 +211,11 @@ sub ec2_get_instances_status {
     eval {
         my $ec2 = Paws->service('EC2', region => $options{region});
         my $instances = $ec2->DescribeInstanceStatus(DryRun => 0, IncludeAllInstances => 1);
+        
         foreach (@{$instances->{InstanceStatuses}}) {
-            $instance_results->{$_->{InstanceId}} = { state => $_->{InstanceState}->{Name} };
+            $instance_results->{$_->{InstanceId}} = { state => $_->{InstanceState}->{Name}, 
+                                                      code => => $_->{InstanceState}->{Code}, 
+                                                      status => => $_->{InstanceStatus}->{Status} };
         }
     };
     if ($@) {
@@ -220,6 +224,36 @@ sub ec2_get_instances_status {
     }
     
     return $instance_results;
+}
+
+sub ec2_get_instances {
+    my ($self, %options) = @_;
+    
+    my $instance_results = {};
+    eval {
+        my $ec2 = Paws->service('EC2', region => $options{region});
+        my $instances = $ec2->DescribeInstances(DryRun => 0);
+        
+        foreach my $reservation (@{$instances->{Reservations}}) {
+            foreach my $instance (@{$reservation->{Instances}}) {
+                # use Data::Dumper;
+                # print Dumper $instance;
+                $instance_results->{$instance->{InstanceId}} = { state => $instance->{State}->{Name}, 
+                                                                 code => => $instance->{State}->{Code},
+                                                                 availabilityzone => => $instance->{Placement}->{AvailabilityZone},
+                                                                 instancetype => => $instance->{InstanceType},
+                                                                 name => => $instance->{Tags}->{Name} };
+            }
+        }
+    };
+    if ($@) {
+        $self->{output}->add_option_msg(short_msg => "error: $@");
+        $self->{output}->option_exit();
+    }
+    
+    use Data::Dumper;
+    print Dumper $instance_results;
+    # return $instance_results;
 }
 
 sub rds_get_instances_status {
