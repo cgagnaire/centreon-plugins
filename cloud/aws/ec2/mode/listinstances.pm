@@ -33,7 +33,7 @@ sub new {
     $self->{version} = '1.0';
     $options{options}->add_options(arguments =>
                                 {
-                                "region:s"      => { name => 'region' },
+                                    "region:s"      => { name => 'region' },
                                 });
 
     return $self;

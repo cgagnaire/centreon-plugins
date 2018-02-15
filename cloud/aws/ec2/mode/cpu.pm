@@ -27,7 +27,7 @@ use warnings;
 
 my %map_type = (
     "instance" => "InstanceId",
-    "asg" => "AutoScalingGroupName",
+    "asg"      => "AutoScalingGroupName",
 );
 
 sub prefix_metric_output {
@@ -47,10 +47,10 @@ sub set_counters {
         foreach my $metric ('CPUCreditBalance', 'CPUCreditUsage', 'CPUSurplusCreditBalance', 'CPUSurplusCreditsCharged') {
             my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
                                 key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'type' }, { name => 'stat' } ],
-                                output_template => $metric . ': %.3f',
+                                output_template => $metric . ': %.2f',
                                 perfdatas => [
                                     { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
-                                      template => '%.3f', label_extra_instance => 1, instance_use => 'display_absolute' },
+                                      template => '%.2f', label_extra_instance => 1, instance_use => 'display_absolute' },
                                 ],
                             }
                         };
@@ -100,10 +100,16 @@ sub check_options {
         $self->{output}->option_exit();
     }
 
-    if (!defined($self->{option_results}->{type}) || $self->{option_results}->{type} eq ''
-        || $self->{option_results}->{type} ne 'asg' && $self->{option_results}->{type} ne 'instance') {
+    if (!defined($self->{option_results}->{type}) || $self->{option_results}->{type} eq '') {
         $self->{output}->add_option_msg(short_msg => "Need to specify --type option.");
         $self->{output}->option_exit();
+    }
+
+    if ($self->{option_results}->{type} ne 'asg' && $self->{option_results}->{type} ne 'instance') {
+        $self->{output}->output_add(severity => 'OK',
+                                    short_msg => "Instance type '" . $self->{option_results}->{type} . "' is not handled for this mode");
+        $self->{output}->display(force_ignore_perfdata => 1);
+        $self->{output}->exit();
     }
 
     if (!defined($self->{option_results}->{name}) || $self->{option_results}->{name} eq '') {
@@ -127,7 +133,8 @@ sub check_options {
         }
     }
 
-    foreach my $metric ('CPUCreditBalance', 'CPUCreditUsage', 'CPUSurplusCreditBalance', 'CPUSurplusCreditsCharged', 'CPUUtilization') {
+    foreach my $metric ('CPUCreditBalance', 'CPUCreditUsage', 'CPUSurplusCreditBalance',
+        'CPUSurplusCreditsCharged', 'CPUUtilization') {
         next if (defined($self->{option_results}->{filter_metric}) && $self->{option_results}->{filter_metric} ne ''
             && $metric !~ /$self->{option_results}->{filter_metric}/);
 
@@ -149,7 +156,7 @@ sub manage_selection {
             timeframe => $self->{option_results}->{timeframe},
             period => $self->{option_results}->{period},
         );
-        
+
         foreach my $metric (keys $metric_results{$instance}) {
             foreach my $stat ('minimum', 'maximum', 'average', 'sum') {
                 next if (!defined($metric_results{$instance}->{$metric}->{$stat}));

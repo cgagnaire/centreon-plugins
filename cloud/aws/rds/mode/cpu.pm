@@ -47,10 +47,10 @@ sub set_counters {
         foreach my $metric ('CPUCreditBalance', 'CPUCreditUsage') {
             my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
                                 key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'type' }, { name => 'stat' } ],
-                                output_template => $metric . ': %.3f',
+                                output_template => $metric . ': %.2f',
                                 perfdatas => [
                                     { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
-                                      template => '%.3f', label_extra_instance => 1, instance_use => 'display_absolute' },
+                                      template => '%.2f', min => 0, label_extra_instance => 1, instance_use => 'display_absolute' },
                                 ],
                             }
                         };
@@ -62,7 +62,7 @@ sub set_counters {
                                 output_template => $metric . ': %.2f %%',
                                 perfdatas => [
                                     { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
-                                      template => '%.2f', unit => '%', label_extra_instance => 1, instance_use => 'display_absolute' },
+                                      template => '%.2f', unit => '%', min => 0, max => 100, label_extra_instance => 1, instance_use => 'display_absolute' },
                                 ],
                             }
                         };

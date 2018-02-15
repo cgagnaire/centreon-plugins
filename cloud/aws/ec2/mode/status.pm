@@ -29,7 +29,7 @@ my $instance_mode;
 
 my %map_type = (
     "instance" => "InstanceId",
-    "asg" => "AutoScalingGroupName",
+    "asg"      => "AutoScalingGroupName",
 );
 
 my %map_status = (
@@ -130,10 +130,16 @@ sub check_options {
         $self->{output}->option_exit();
     }
 
-    if (!defined($self->{option_results}->{type}) || $self->{option_results}->{type} eq ''
-        || $self->{option_results}->{type} ne 'asg' && $self->{option_results}->{type} ne 'instance') {
+    if (!defined($self->{option_results}->{type}) || $self->{option_results}->{type} eq '') {
         $self->{output}->add_option_msg(short_msg => "Need to specify --type option.");
         $self->{output}->option_exit();
+    }
+
+    if ($self->{option_results}->{type} ne 'asg' && $self->{option_results}->{type} ne 'instance') {
+        $self->{output}->output_add(severity => 'OK',
+                                    short_msg => "Instance type '" . $self->{option_results}->{type} . "' is not handled for this mode");
+        $self->{output}->display(force_ignore_perfdata => 1);
+        $self->{output}->exit();
     }
 
     if (!defined($self->{option_results}->{name}) || $self->{option_results}->{name} eq '') {

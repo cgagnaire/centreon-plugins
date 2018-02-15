@@ -42,8 +42,8 @@ sub new {
     if (!defined($options{noptions})) {
         $options{options}->add_options(arguments => 
                     {                      
-                    "aws-secret-key:s"  => { name => 'aws_secret_key' },
-                    "aws-access-key:s"  => { name => 'aws_access_key' },
+                    "aws-secret-key:s"    => { name => 'aws_secret_key' },
+                    "aws-access-key:s"    => { name => 'aws_access_key' },
                     "timeout:s"           => { name => 'timeout', default => 50 },
                     "sudo"                => { name => 'sudo' },
                     "command:s"           => { name => 'command', default => 'aws' },

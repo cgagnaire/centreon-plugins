@@ -30,72 +30,6 @@ my %map_type = (
     "cluster"  => "DBClusterIdentifier",
 );
 
-my $instance_mode;
-
-sub prefix_metric_output {
-    my ($self, %options) = @_;
-    
-    return ucfirst($options{instance_value}->{type}) . " '" . $options{instance_value}->{display} . "' " . $options{instance_value}->{stat} . " ";
-}
-
-sub custom_metric_calc {
-    my ($self, %options) = @_;
-    
-    $self->{result_values}->{value} = $options{new_datas}->{$self->{instance} . '_' . $options{extra_options}->{metric} . '_' . $options{extra_options}->{stat}};
-    $self->{result_values}->{stat} = $options{extra_options}->{stat};
-    $self->{result_values}->{metric} = $options{extra_options}->{metric};
-    $self->{result_values}->{display} = $options{new_datas}->{$self->{instance} . '_display'};
-    return 0;
-}
-
-sub custom_metric_threshold {
-    my ($self, %options) = @_;
-
-    my $exit = $self->{perfdata}->threshold_check(value => $self->{result_values}->{value},
-                                                  threshold => [ { label => 'critical-' . lc($self->{result_values}->{metric}) . "-" . lc($self->{result_values}->{stat}), exit_litteral => 'critical' },
-                                                                 { label => 'warning-' . lc($self->{result_values}->{metric}) . "-" . lc($self->{result_values}->{stat}), exit_litteral => 'warning' } ]);
-    return $exit;
-}
-
-sub custom_usage_perfdata {
-    my ($self, %options) = @_;
-
-    $self->{output}->perfdata_add(label => lc($self->{result_values}->{metric}) . "_" . lc($self->{result_values}->{stat}) . "_" . lc($self->{result_values}->{display}),
-				                  unit => 'B/s',
-                                  value => sprintf("%.2f", $self->{result_values}->{value}),
-                                  warning => $self->{perfdata}->get_perfdata_for_output(label => 'warning-' . lc($self->{result_values}->{metric}) . "-" . lc($self->{result_values}->{stat})),
-                                  critical => $self->{perfdata}->get_perfdata_for_output(label => 'critical-' . lc($self->{result_values}->{metric}) . "-" . lc($self->{result_values}->{stat})),
-                                 );
-}
-
-sub custom_usage_output {
-    my ($self, %options) = @_;
-    
-    my ($value, $unit) = $self->{perfdata}->change_bytes(value => $self->{result_values}->{value});
-    my $msg = $self->{result_values}->{metric}  . ": " . $value . $unit . "/s"; 
-    
-    return $msg;
-}
-
-sub custom_iops_perfdata {
-    my ($self, %options) = @_;
-
-    $self->{output}->perfdata_add(label => lc($self->{result_values}->{metric}) . "_" . lc($self->{result_values}->{stat}) . "_" . lc($self->{result_values}->{display}),
-                                  unit => 'iops/s',
-                                  value => sprintf("%.2f", $self->{result_values}->{value}),
-                                  warning => $self->{perfdata}->get_perfdata_for_output(label => 'warning-' . lc($self->{result_values}->{metric}) . "-" . lc($self->{result_values}->{stat})),
-                                  critical => $self->{perfdata}->get_perfdata_for_output(label => 'critical-' . lc($self->{result_values}->{metric}) . "-" . lc($self->{result_values}->{stat})),
-                                 );
-}
-
-sub custom_iops_output {
-    my ($self, %options) = @_;
-
-    my $msg = sprintf("%s: %.2f iops/s", $self->{result_values}->{metric}, $self->{result_values}->{value});
-    
-    return $msg;
-}
-
 sub set_counters {
     my ($self, %options) = @_;
     
@@ -106,24 +40,37 @@ sub set_counters {
     foreach my $statistic ('minimum', 'maximum', 'average', 'sum') {
         foreach my $metric ('ReadThroughput', 'WriteThroughput') {
             my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
-                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'stat' } ],
-                                closure_custom_calc => $self->can('custom_metric_calc'),
-                                closure_custom_calc_extra_options => { metric => $metric, stat => $statistic },
-                                closure_custom_output => $self->can('custom_usage_output'),
-                                closure_custom_perfdata => $self->can('custom_usage_perfdata'),
-                                closure_custom_threshold_check => $self->can('custom_metric_threshold'),
+                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'type' }, { name => 'stat' } ],
+                                output_template => $metric . ': %.2f %s',
+                                output_change_bytes => 1,
+                                perfdatas => [
+                                    { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
+                                      template => '%s', unit => 'B', min => 0, label_extra_instance => 1, instance_use => 'display_absolute' },
+                                ],
                             }
                         };
             push @{$self->{maps_counters}->{metric}}, $entry;
         }
         foreach my $metric ('ReadIOPS', 'WriteIOPS') {
             my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
-                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'stat' } ],
-                                closure_custom_calc => $self->can('custom_metric_calc'),
-                                closure_custom_calc_extra_options => { metric => $metric, stat => $statistic },
-                                closure_custom_output => $self->can('custom_iops_output'),
-                                closure_custom_perfdata => $self->can('custom_iops_perfdata'),
-                                closure_custom_threshold_check => $self->can('custom_metric_threshold'),
+                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'type' }, { name => 'stat' } ],
+                                output_template => $metric . ': %.2f iops/s',
+                                perfdatas => [
+                                    { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
+                                      template => '%.2f', unit => 'iops/s', min => 0, label_extra_instance => 1, instance_use => 'display_absolute' },
+                                ],
+                            }
+                        };
+            push @{$self->{maps_counters}->{metric}}, $entry;
+        }
+        foreach my $metric ('ReadLatency', 'WriteLatency') {
+            my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
+                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'type' }, { name => 'stat' } ],
+                                output_template => $metric . ': %.2f s',
+                                perfdatas => [
+                                    { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
+                                      template => '%.2f', unit => 's', min => 0, label_extra_instance => 1, instance_use => 'display_absolute' },
+                                ],
                             }
                         };
             push @{$self->{maps_counters}->{metric}}, $entry;
@@ -193,14 +140,12 @@ sub check_options {
         }
     }
 
-    foreach my $metric ('ReadThroughput', 'WriteThroughput', 'ReadIOPS', 'WriteIOPS') {
+    foreach my $metric ('ReadThroughput', 'WriteThroughput', 'ReadIOPS', 'WriteIOPS', 'ReadLatency', 'WriteLatency') {
         next if (defined($self->{option_results}->{filter_metric}) && $self->{option_results}->{filter_metric} ne ''
             && $metric !~ /$self->{option_results}->{filter_metric}/);
 
         push @{$self->{aws_metrics}}, $metric;
     }
-
-    $instance_mode = $self;
 }
 
 sub manage_selection {
@@ -268,7 +213,7 @@ Set the instance name (Required) (Can be multiple).
 =item B<--filter-metric>
 
 Filter metrics (Can be: 'ReadThroughput', 'WriteThroughput',
-'ReadIOPS', 'WriteIOPS') 
+'ReadIOPS', 'WriteIOPS', 'ReadLatency', 'WriteLatency') 
 (Can be a regexp).
 
 =item B<--statistic>
@@ -287,12 +232,14 @@ Set timeframe in seconds (Default: 600).
 =item B<--warning-$metric$-$statistic$>
 
 Thresholds warning ($metric$ can be: 'readthroughput', 'writethroughput',
-'readiops', 'writeiops', $statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
+'readiops', 'writeiops', 'readlatency', 'writelatency',
+$statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
 
 =item B<--critical-$metric$-$statistic$>
 
 Thresholds critical ($metric$ can be: 'readthroughput', 'writethroughput',
-'readiops', 'writeiops', $statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
+'readiops', 'writeiops', 'readlatency', 'writelatency',
+$statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
 
 =back
 

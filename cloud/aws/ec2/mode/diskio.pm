@@ -27,7 +27,7 @@ use warnings;
 
 my %map_type = (
     "instance" => "InstanceId",
-    "asg" => "AutoScalingGroupName",
+    "asg"      => "AutoScalingGroupName",
 );
 
 my $instance_mode;
@@ -61,7 +61,10 @@ sub custom_metric_threshold {
 sub custom_usage_perfdata {
     my ($self, %options) = @_;
 
-    $self->{output}->perfdata_add(label => lc($self->{result_values}->{metric}) . "_" . lc($self->{result_values}->{stat}) . "_" . lc($self->{result_values}->{display}),
+    my $extra_label = '';
+    $extra_label = '_' . lc($self->{result_values}->{display}) if (!defined($options{extra_instance}) || $options{extra_instance} != 0);
+
+    $self->{output}->perfdata_add(label => lc($self->{result_values}->{metric}) . "_" . lc($self->{result_values}->{stat}) . $extra_label,
 				                  unit => defined($instance_mode->{option_results}->{per_sec}) ? 'B/s' : 'B',
                                   value => sprintf("%.2f", defined($instance_mode->{option_results}->{per_sec}) ? $self->{result_values}->{value_per_sec} : $self->{result_values}->{value}),
                                   warning => $self->{perfdata}->get_perfdata_for_output(label => 'warning-' . lc($self->{result_values}->{metric}) . "-" . lc($self->{result_values}->{stat})),
@@ -74,7 +77,7 @@ sub custom_usage_output {
     my $msg = "";
 
     if (defined($instance_mode->{option_results}->{per_sec})) {
-	my ($value, $unit) = $self->{perfdata}->change_bytes(value => $self->{result_values}->{value_per_sec});
+	    my ($value, $unit) = $self->{perfdata}->change_bytes(value => $self->{result_values}->{value_per_sec});
         $msg = $self->{result_values}->{metric}  . ": " . $value . $unit . "/s"; 
     } else {
         my ($value, $unit) = $self->{perfdata}->change_bytes(value => $self->{result_values}->{value});
@@ -86,7 +89,10 @@ sub custom_usage_output {
 sub custom_ops_perfdata {
     my ($self, %options) = @_;
 
-    $self->{output}->perfdata_add(label => lc($self->{result_values}->{metric}) . "_" . lc($self->{result_values}->{stat}) . "_" . lc($self->{result_values}->{display}),
+    my $extra_label = '';
+    $extra_label = '_' . lc($self->{result_values}->{display}) if (!defined($options{extra_instance}) || $options{extra_instance} != 0);
+
+    $self->{output}->perfdata_add(label => lc($self->{result_values}->{metric}) . "_" . lc($self->{result_values}->{stat}) . $extra_label,
                                   unit => defined($instance_mode->{option_results}->{per_sec}) ? 'ops/s' : 'ops',
                                   value => sprintf("%.2f", defined($instance_mode->{option_results}->{per_sec}) ? $self->{result_values}->{value_per_sec} : $self->{result_values}->{value}),
                                   warning => $self->{perfdata}->get_perfdata_for_output(label => 'warning-' . lc($self->{result_values}->{metric}) . "-" . lc($self->{result_values}->{stat})),
@@ -173,10 +179,16 @@ sub check_options {
         $self->{output}->option_exit();
     }
 
-    if (!defined($self->{option_results}->{type}) || $self->{option_results}->{type} eq ''
-        || $self->{option_results}->{type} ne 'asg' && $self->{option_results}->{type} ne 'instance') {
+    if (!defined($self->{option_results}->{type}) || $self->{option_results}->{type} eq '') {
         $self->{output}->add_option_msg(short_msg => "Need to specify --type option.");
         $self->{output}->option_exit();
+    }
+
+    if ($self->{option_results}->{type} ne 'asg' && $self->{option_results}->{type} ne 'instance') {
+        $self->{output}->output_add(severity => 'OK',
+                                    short_msg => "Instance type '" . $self->{option_results}->{type} . "' is not handled for this mode");
+        $self->{output}->display(force_ignore_perfdata => 1);
+        $self->{output}->exit();
     }
 
     if (!defined($self->{option_results}->{name}) || $self->{option_results}->{name} eq '') {
