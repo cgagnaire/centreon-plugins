@@ -77,7 +77,7 @@ sub custom_traffic_output {
     my $msg = "";
 
     if (defined($instance_mode->{option_results}->{per_sec})) {
-	    my ($value, $unit) = $self->{perfdata}->change_bytes(value => $self->{result_values}->{value_per_sec});
+        my ($value, $unit) = $self->{perfdata}->change_bytes(value => $self->{result_values}->{value_per_sec});
         $msg = $self->{result_values}->{metric}  . ": " . $value . $unit . "/s"; 
     } else {
         my ($value, $unit) = $self->{perfdata}->change_bytes(value => $self->{result_values}->{value});
