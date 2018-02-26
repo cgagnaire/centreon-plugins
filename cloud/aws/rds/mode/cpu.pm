@@ -189,6 +189,8 @@ perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=rd
 
 Works for the following database engines : aurora, mysql, mariadb.
 
+See 'https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/rds-metricscollected.html' for more informations.
+
 =over 8
 
 =item B<--region>

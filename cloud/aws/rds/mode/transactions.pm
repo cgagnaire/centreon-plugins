@@ -18,7 +18,7 @@
 # limitations under the License.
 #
 
-package cloud::aws::rds::mode::diskio;
+package cloud::aws::rds::mode::transactions;
 
 use base qw(centreon::plugins::templates::counter);
 
@@ -40,54 +40,30 @@ sub set_counters {
     my ($self, %options) = @_;
     
     $self->{maps_counters_type} = [
-        { name => 'metric', type => 1, cb_prefix_output => 'prefix_metric_output', message_multiple => "All disk metrics are ok", skipped_code => { -10 => 1 } },
+        { name => 'metric', type => 1, cb_prefix_output => 'prefix_metric_output', message_multiple => "All transactions metrics are ok", skipped_code => { -10 => 1 } },
     ];
 
     foreach my $statistic ('minimum', 'maximum', 'average', 'sum') {
-        foreach my $metric ('ReadThroughput', 'WriteThroughput') {
+        foreach my $metric ('ActiveTransactions', 'BlockedTransactions', 'CommitThroughput') {
             my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
                                 key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'type' }, { name => 'stat' } ],
-                                output_template => $metric . ': %.2f %s/s',
+                                output_template => $metric . ': %d ops',
                                 output_change_bytes => 1,
                                 perfdatas => [
                                     { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
-                                      template => '%.2f', unit => 'B/s', min => 0, label_extra_instance => 1, instance_use => 'display_absolute' },
+                                      template => '%d', unit => 'ops', min => 0, label_extra_instance => 1, instance_use => 'display_absolute' },
                                 ],
                             }
                         };
             push @{$self->{maps_counters}->{metric}}, $entry;
         }
-        foreach my $metric ('ReadIOPS', 'WriteIOPS') {
+        foreach my $metric ('CommitLatency') {
             my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
                                 key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'type' }, { name => 'stat' } ],
-                                output_template => $metric . ': %.2f iops',
+                                output_template => $metric . ': %.2f ms',
                                 perfdatas => [
                                     { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
-                                      template => '%.2f', unit => 'iops', min => 0, label_extra_instance => 1, instance_use => 'display_absolute' },
-                                ],
-                            }
-                        };
-            push @{$self->{maps_counters}->{metric}}, $entry;
-        }
-        foreach my $metric ('ReadLatency', 'WriteLatency') {
-            my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
-                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'type' }, { name => 'stat' } ],
-                                output_template => $metric . ': %.2f s',
-                                perfdatas => [
-                                    { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
-                                      template => '%.2f', unit => 's', min => 0, label_extra_instance => 1, instance_use => 'display_absolute' },
-                                ],
-                            }
-                        };
-            push @{$self->{maps_counters}->{metric}}, $entry;
-        }
-        foreach my $metric ('DiskQueueDepth') {
-            my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
-                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'type' }, { name => 'stat' } ],
-                                output_template => $metric . ': %d',
-                                perfdatas => [
-                                    { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
-                                      template => '%d', min => 0, label_extra_instance => 1, instance_use => 'display_absolute' },
+                                      template => '%.2f', unit => 'ms', min => 0, label_extra_instance => 1, instance_use => 'display_absolute' },
                                 ],
                             }
                         };
@@ -158,7 +134,7 @@ sub check_options {
         }
     }
 
-    foreach my $metric ('ReadThroughput', 'WriteThroughput', 'ReadIOPS', 'WriteIOPS', 'ReadLatency', 'WriteLatency', 'DiskQueueDepth') {
+    foreach my $metric ('ActiveTransactions', 'BlockedTransactions', 'CommitThroughput', 'CommitLatency') {
         next if (defined($self->{option_results}->{filter_metric}) && $self->{option_results}->{filter_metric} ne ''
             && $metric !~ /$self->{option_results}->{filter_metric}/);
 
@@ -205,14 +181,14 @@ __END__
 
 =head1 MODE
 
-Check RDS instances disk IO metrics.
+Check RDS instances transactions per second.
 
 Example: 
-perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=rds-diskio --region='eu-west-1'
---type='cluster' --name='centreon-db-ppd-cluster' --filter-metric='Read' --statistic='sum'
---critical-readiops-sum='10' --verbose
+perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=rds-transactions --region='eu-west-1'
+--type='instance' --name='centreon-db-ppd' --filter-metric='' --statistic='average'
+--critical-blockedtransactions-average='1' --verbose
 
-Works for the following database engines : mysql, mariadb.
+Works for the following database engines : aurora.
 
 See 'https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/rds-metricscollected.html' for more informations.
 
@@ -232,8 +208,7 @@ Set the instance name (Required) (Can be multiple).
 
 =item B<--filter-metric>
 
-Filter metrics (Can be: 'ReadThroughput', 'WriteThroughput',
-'ReadIOPS', 'WriteIOPS', 'ReadLatency', 'WriteLatency', 'DiskQueueDepth') 
+Filter metrics (Can be: 'ActiveTransactions', 'BlockedTransactions', 'CommitThroughput', 'CommitLatency') 
 (Can be a regexp).
 
 =item B<--statistic>
@@ -251,15 +226,13 @@ Set timeframe in seconds (Default: 600).
 
 =item B<--warning-$metric$-$statistic$>
 
-Thresholds warning ($metric$ can be: 'readthroughput', 'writethroughput',
-'readiops', 'writeiops', 'readlatency', 'writelatency', 'diskqueuedepth',
-$statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
+Thresholds warning ($metric$ can be: 'activetransactions', 'blockedtransactions', 'committhroughput',
+'commitlatency', $statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
 
 =item B<--critical-$metric$-$statistic$>
 
-Thresholds critical ($metric$ can be: 'readthroughput', 'writethroughput',
-'readiops', 'writeiops', 'readlatency', 'writelatency', 'diskqueuedepth',
-$statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
+Thresholds critical ($metric$ can be: 'activetransactions', 'blockedtransactions', 'committhroughput',
+'commitlatency', $statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
 
 =back
 

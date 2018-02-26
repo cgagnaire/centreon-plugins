@@ -18,7 +18,7 @@
 # limitations under the License.
 #
 
-package cloud::aws::rds::mode::diskio;
+package cloud::aws::rds::mode::volume;
 
 use base qw(centreon::plugins::templates::counter);
 
@@ -26,9 +26,11 @@ use strict;
 use warnings;
 
 my %map_type = (
-    "instance" => "DBInstanceIdentifier",
-    "cluster"  => "DBClusterIdentifier",
+    "cluster"  => "DbClusterIdentifier",
 );
+
+
+my $instance_mode;
 
 sub prefix_metric_output {
     my ($self, %options) = @_;
@@ -36,59 +38,83 @@ sub prefix_metric_output {
     return ucfirst($options{instance_value}->{type}) . " '" . $options{instance_value}->{display} . "' " . $options{instance_value}->{stat} . " ";
 }
 
+sub custom_metric_calc {
+    my ($self, %options) = @_;
+    
+    $self->{result_values}->{value} = $options{new_datas}->{$self->{instance} . '_' . $options{extra_options}->{metric} . '_' . $options{extra_options}->{stat}};
+    $self->{result_values}->{value_per_sec} = $self->{result_values}->{value} / $instance_mode->{option_results}->{timeframe};
+    $self->{result_values}->{stat} = $options{extra_options}->{stat};
+    $self->{result_values}->{metric} = $options{extra_options}->{metric};
+    $self->{result_values}->{display} = $options{new_datas}->{$self->{instance} . '_display'};
+    return 0;
+}
+
+sub custom_metric_threshold {
+    my ($self, %options) = @_;
+
+    my $exit = $self->{perfdata}->threshold_check(value => defined($instance_mode->{option_results}->{per_sec}) ?  $self->{result_values}->{value_per_sec} : $self->{result_values}->{value},
+                                                  threshold => [ { label => 'critical-' . lc($self->{result_values}->{metric}) . "-" . lc($self->{result_values}->{stat}), exit_litteral => 'critical' },
+                                                                 { label => 'warning-' . lc($self->{result_values}->{metric}) . "-" . lc($self->{result_values}->{stat}), exit_litteral => 'warning' } ]);
+    return $exit;
+}
+
+sub custom_ops_perfdata {
+    my ($self, %options) = @_;
+
+    my $extra_label = '';
+    $extra_label = '_' . lc($self->{result_values}->{display}) if (!defined($options{extra_instance}) || $options{extra_instance} != 0);
+
+    $self->{output}->perfdata_add(label => lc($self->{result_values}->{metric}) . "_" . lc($self->{result_values}->{stat}) . $extra_label,
+                                  unit => defined($instance_mode->{option_results}->{per_sec}) ? 'ops/s' : 'ops',
+                                  value => sprintf("%.2f", defined($instance_mode->{option_results}->{per_sec}) ? $self->{result_values}->{value_per_sec} : $self->{result_values}->{value}),
+                                  warning => $self->{perfdata}->get_perfdata_for_output(label => 'warning-' . lc($self->{result_values}->{metric}) . "-" . lc($self->{result_values}->{stat})),
+                                  critical => $self->{perfdata}->get_perfdata_for_output(label => 'critical-' . lc($self->{result_values}->{metric}) . "-" . lc($self->{result_values}->{stat})),
+                                 );
+}
+
+sub custom_ops_output {
+    my ($self, %options) = @_;
+
+    my $msg ="";
+
+    if (defined($instance_mode->{option_results}->{per_sec})) {
+        $msg = sprintf("%s: %.2f ops/s", $self->{result_values}->{metric}, $self->{result_values}->{value_per_sec});
+    } else {
+        $msg = sprintf("%s: %.2f ops", $self->{result_values}->{metric}, $self->{result_values}->{value});
+    }
+ 
+    return $msg;
+}
+
 sub set_counters {
     my ($self, %options) = @_;
     
     $self->{maps_counters_type} = [
-        { name => 'metric', type => 1, cb_prefix_output => 'prefix_metric_output', message_multiple => "All disk metrics are ok", skipped_code => { -10 => 1 } },
+        { name => 'metric', type => 1, cb_prefix_output => 'prefix_metric_output', message_multiple => "All volume metrics are ok", skipped_code => { -10 => 1 } },
     ];
 
     foreach my $statistic ('minimum', 'maximum', 'average', 'sum') {
-        foreach my $metric ('ReadThroughput', 'WriteThroughput') {
+        foreach my $metric ('VolumeBytesUsed') {
             my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
                                 key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'type' }, { name => 'stat' } ],
-                                output_template => $metric . ': %.2f %s/s',
+                                output_template => $metric . ': %.2f %s',
                                 output_change_bytes => 1,
                                 perfdatas => [
                                     { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
-                                      template => '%.2f', unit => 'B/s', min => 0, label_extra_instance => 1, instance_use => 'display_absolute' },
+                                      template => '%.2f', unit => 'B', min => 0, label_extra_instance => 1, instance_use => 'display_absolute' },
                                 ],
                             }
                         };
             push @{$self->{maps_counters}->{metric}}, $entry;
         }
-        foreach my $metric ('ReadIOPS', 'WriteIOPS') {
+        foreach my $metric ('VolumeReadIOPs', 'VolumeWriteIOPs') {
             my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
-                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'type' }, { name => 'stat' } ],
-                                output_template => $metric . ': %.2f iops',
-                                perfdatas => [
-                                    { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
-                                      template => '%.2f', unit => 'iops', min => 0, label_extra_instance => 1, instance_use => 'display_absolute' },
-                                ],
-                            }
-                        };
-            push @{$self->{maps_counters}->{metric}}, $entry;
-        }
-        foreach my $metric ('ReadLatency', 'WriteLatency') {
-            my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
-                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'type' }, { name => 'stat' } ],
-                                output_template => $metric . ': %.2f s',
-                                perfdatas => [
-                                    { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
-                                      template => '%.2f', unit => 's', min => 0, label_extra_instance => 1, instance_use => 'display_absolute' },
-                                ],
-                            }
-                        };
-            push @{$self->{maps_counters}->{metric}}, $entry;
-        }
-        foreach my $metric ('DiskQueueDepth') {
-            my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
-                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'type' }, { name => 'stat' } ],
-                                output_template => $metric . ': %d',
-                                perfdatas => [
-                                    { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
-                                      template => '%d', min => 0, label_extra_instance => 1, instance_use => 'display_absolute' },
-                                ],
+                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'stat' } ],
+                                closure_custom_calc => $self->can('custom_metric_calc'),
+                                closure_custom_calc_extra_options => { metric => $metric, stat => $statistic },
+                                closure_custom_output => $self->can('custom_ops_output'),
+                                closure_custom_perfdata => $self->can('custom_ops_perfdata'),
+                                closure_custom_threshold_check => $self->can('custom_metric_threshold'),
                             }
                         };
             push @{$self->{maps_counters}->{metric}}, $entry;
@@ -105,12 +131,13 @@ sub new {
     $options{options}->add_options(arguments =>
                                 {
                                     "region:s"        => { name => 'region' },
-                                    "type:s"	      => { name => 'type' },
+                                    "type:s"	      => { name => 'type', default => 'cluster' },
                                     "name:s@"	      => { name => 'name' },
                                     "filter-metric:s" => { name => 'filter_metric' },
                                     "statistic:s@"    => { name => 'statistic' },
-                                    "timeframe:s"     => { name => 'timeframe', default => 600 },
+                                    "timeframe:s"     => { name => 'timeframe', default => 300 },
                                     "period:s"        => { name => 'period', default => 60 },
+				                    "per-sec"	      => { name => 'per_sec' },
                                 });
     
     return $self;
@@ -130,7 +157,7 @@ sub check_options {
         $self->{output}->option_exit();
     }
 
-    if ($self->{option_results}->{type} ne 'cluster' && $self->{option_results}->{type} ne 'instance') {
+    if ($self->{option_results}->{type} ne 'cluster') {
         $self->{output}->output_add(severity => 'OK',
                                     short_msg => "Instance type '" . $self->{option_results}->{type} . "' is not handled for this mode");
         $self->{output}->display(force_ignore_perfdata => 1);
@@ -158,12 +185,14 @@ sub check_options {
         }
     }
 
-    foreach my $metric ('ReadThroughput', 'WriteThroughput', 'ReadIOPS', 'WriteIOPS', 'ReadLatency', 'WriteLatency', 'DiskQueueDepth') {
+    foreach my $metric ('VolumeBytesUsed', 'VolumeReadIOPs', 'VolumeWriteIOPs') {
         next if (defined($self->{option_results}->{filter_metric}) && $self->{option_results}->{filter_metric} ne ''
             && $metric !~ /$self->{option_results}->{filter_metric}/);
 
         push @{$self->{aws_metrics}}, $metric;
     }
+
+    $instance_mode = $self;
 }
 
 sub manage_selection {
@@ -174,7 +203,7 @@ sub manage_selection {
         $metric_results{$instance} = $options{custom}->cloudwatch_get_metrics(
             region => $self->{option_results}->{region},
             namespace => 'AWS/RDS',
-            dimensions => [ { Name => $map_type{$self->{option_results}->{type}}, Value => $instance } ],
+            dimensions => [ { Name => $map_type{$self->{option_results}->{type}}, Value => $instance } , { Name => 'EngineName', Value => 'aurora' } ],
             metrics => $self->{aws_metrics},
             statistics => $self->{aws_statistics},
             timeframe => $self->{option_results}->{timeframe},
@@ -205,14 +234,14 @@ __END__
 
 =head1 MODE
 
-Check RDS instances disk IO metrics.
+Check RDS instances volume metrics.
 
 Example: 
-perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=rds-diskio --region='eu-west-1'
---type='cluster' --name='centreon-db-ppd-cluster' --filter-metric='Read' --statistic='sum'
---critical-readiops-sum='10' --verbose
+perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=rds-volume --region='eu-west-1'
+--type='cluster' --name='centreon-db-ppd-cluster' --filter-metric='' --statistic='average'
+--critical-volumebytesused-average='10' --verbose
 
-Works for the following database engines : mysql, mariadb.
+Works for the following database engines : aurora.
 
 See 'https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/rds-metricscollected.html' for more informations.
 
@@ -224,7 +253,7 @@ Set the region name (Required).
 
 =item B<--type>
 
-Set the instance type (Required) (Can be: 'cluster', 'instance').
+Set the instance type (Required) (Can be: 'cluster').
 
 =item B<--name>
 
@@ -232,8 +261,7 @@ Set the instance name (Required) (Can be multiple).
 
 =item B<--filter-metric>
 
-Filter metrics (Can be: 'ReadThroughput', 'WriteThroughput',
-'ReadIOPS', 'WriteIOPS', 'ReadLatency', 'WriteLatency', 'DiskQueueDepth') 
+Filter metrics (Can be: 'VolumeBytesUsed', 'VolumeReadIOPs', 'VolumeWriteIOPs') 
 (Can be a regexp).
 
 =item B<--statistic>
@@ -247,18 +275,16 @@ Set period in seconds (Default: 60).
 
 =item B<--timeframe>
 
-Set timeframe in seconds (Default: 600).
+Set timeframe in seconds (Default: 300).
 
 =item B<--warning-$metric$-$statistic$>
 
-Thresholds warning ($metric$ can be: 'readthroughput', 'writethroughput',
-'readiops', 'writeiops', 'readlatency', 'writelatency', 'diskqueuedepth',
+Thresholds warning ($metric$ can be: 'volumebytesused', 'volumereadiops', 'volumewriteiops',
 $statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
 
 =item B<--critical-$metric$-$statistic$>
 
-Thresholds critical ($metric$ can be: 'readthroughput', 'writethroughput',
-'readiops', 'writeiops', 'readlatency', 'writelatency', 'diskqueuedepth',
+Thresholds critical ($metric$ can be: 'volumebytesused', 'volumereadiops', 'volumewriteiops',
 $statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
 
 =back
