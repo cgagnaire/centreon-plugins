@@ -25,7 +25,10 @@ use base qw(centreon::plugins::templates::counter);
 use strict;
 use warnings;
 
-my $instance_mode;
+my %map_type = (
+    "loadbalancer"      => "LoadBalancerName",
+    "availabilityzone"  => "AvailabilityZone",
+);
 
 sub prefix_metric_output {
     my ($self, %options) = @_;
@@ -35,7 +38,7 @@ sub prefix_metric_output {
         $availability_zone = "[$options{instance_value}->{availability_zone}] ";
     }
     
-    return "ELB '" . $options{instance_value}->{display} . "' " . $availability_zone . $options{instance_value}->{stat} . " ";
+    return ucfirst($options{instance_value}->{type}) . " '" . $options{instance_value}->{display} . "' " . $availability_zone . $options{instance_value}->{stat} . " ";
 }
 
 sub set_counters {
@@ -48,7 +51,7 @@ sub set_counters {
     foreach my $statistic ('minimum', 'maximum', 'average', 'sum') {
         foreach my $metric ('HealthyHostCount', 'UnHealthyHostCount') {
             my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
-                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'stat' } ],
+                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'type' }, { name => 'stat' } ],
                                 output_template => $metric . ': %d',
                                 perfdatas => [
                                     { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
@@ -70,6 +73,7 @@ sub new {
     $options{options}->add_options(arguments =>
                                 {
                                     "region:s"              => { name => 'region' },
+                                    "type:s"	            => { name => 'type' },
                                     "name:s@"	            => { name => 'name' },
                                     "availability-zone:s"   => { name => 'availability_zone' },
                                     "filter-metric:s"       => { name => 'filter_metric' },
@@ -87,6 +91,23 @@ sub check_options {
 
     if (!defined($self->{option_results}->{region}) || $self->{option_results}->{region} eq '') {
         $self->{output}->add_option_msg(short_msg => "Need to specify --region option.");
+        $self->{output}->option_exit();
+    }
+
+    if (!defined($self->{option_results}->{type}) || $self->{option_results}->{type} eq '') {
+        $self->{output}->add_option_msg(short_msg => "Need to specify --type option.");
+        $self->{output}->option_exit();
+    }
+
+    if ($self->{option_results}->{type} ne 'loadbalancer' && $self->{option_results}->{type} ne 'availabilityzone') {
+        $self->{output}->output_add(severity => 'OK',
+                                    short_msg => "Instance type '" . $self->{option_results}->{type} . "' is not handled for this mode");
+        $self->{output}->display(force_ignore_perfdata => 1);
+        $self->{output}->exit();
+    }
+
+    if ($self->{option_results}->{type} eq 'availabilityzone' && defined($self->{option_results}->{availability_zone})) {
+        $self->{output}->add_option_msg(short_msg => "You can't specify --availability-zone option with availabilityzone instance's type");
         $self->{output}->option_exit();
     }
 
@@ -121,8 +142,6 @@ sub check_options {
     if (defined($self->{option_results}->{availability_zone}) && $self->{option_results}->{availability_zone} ne '') {
         $self->{aws_availability_zone} = { Name => 'AvailabilityZone', Value => $self->{option_results}->{availability_zone} };
     }
-
-    $instance_mode = $self;
 }
 
 sub manage_selection {
@@ -130,7 +149,7 @@ sub manage_selection {
 
     my %metric_results;
     foreach my $instance (@{$self->{aws_instance}}) {
-        push @{$self->{aws_dimensions}}, { Name => 'LoadBalancerName', Value => $instance };
+        push @{$self->{aws_dimensions}}, { Name => $map_type{$self->{option_results}->{type}}, Value => $instance };
         if (defined($self->{option_results}->{availability_zone}) && $self->{option_results}->{availability_zone} ne '') {
             push @{$self->{aws_dimensions}}, { Name => 'AvailabilityZone', Value => $self->{option_results}->{availability_zone} };
         }
@@ -149,6 +168,7 @@ sub manage_selection {
                 next if (!defined($metric_results{$instance}->{$metric}->{lc($statistic)}));
 
                 $self->{metric}->{$instance . "_" . lc($statistic)}->{display} = $instance;
+                $self->{metric}->{$instance . "_" . lc($statistic)}->{type} = $self->{option_results}->{type};
                 $self->{metric}->{$instance . "_" . lc($statistic)}->{stat} = lc($statistic);
                 $self->{metric}->{$instance . "_" . lc($statistic)}->{availability_zone} = $self->{option_results}->{availability_zone};
                 $self->{metric}->{$instance . "_" . lc($statistic)}->{$metric . "_" . lc($statistic)} = $metric_results{$instance}->{$metric}->{lc($statistic)};
@@ -172,7 +192,7 @@ Check ELB instances health.
 
 Example: 
 perl centreon_plugins.pl --plugin=cloud::aws::elb::plugin --custommode=paws --mode=instancehealth --region='eu-west-1'
---name='elb-www-fr' --critical-healthyhostcount-average='10' --verbose
+--type='loadbalancer' --name='elb-www-fr' --critical-healthyhostcount-average='10' --verbose
 
 See 'https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/elb-metricscollected.html' for more informations.
 
@@ -182,13 +202,17 @@ See 'https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/elb-metricsc
 
 Set the region name (Required).
 
+=item B<--type>
+
+Set the instance type (Required) (Can be: 'loadbalancer', 'availabilityzone').
+
 =item B<--name>
 
 Set the instance name (Required) (Can be multiple).
 
 =item B<--availability-zone>
 
-Add Availability Zone dimension.
+Add Availability Zone dimension (only with --type='loadbalancer').
 
 =item B<--filter-metric>
 
