@@ -32,7 +32,7 @@ sub new {
     $self->{version} = '0.1';
     %{ $self->{modes} } = (
         'http-codes'            => 'cloud::aws::elb::mode::httpcodes',
-        'instance-health'       => 'cloud::aws::elb::mode::instancehealth',
+        'targets-health'        => 'cloud::aws::elb::mode::targetshealth',
         'performances'          => 'cloud::aws::elb::mode::performances',
         'queues'                => 'cloud::aws::elb::mode::queues',
     );

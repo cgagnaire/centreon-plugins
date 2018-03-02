@@ -18,7 +18,7 @@
 # limitations under the License.
 #
 
-package cloud::aws::elb::mode::instancehealth;
+package cloud::aws::elb::mode::targetshealth;
 
 use base qw(centreon::plugins::templates::counter);
 
