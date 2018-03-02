@@ -18,51 +18,34 @@
 # limitations under the License.
 #
 
-package cloud::aws::ec2::mode::cpu;
+package cloud::aws::s3::mode::objects;
 
 use base qw(centreon::plugins::templates::counter);
 
 use strict;
 use warnings;
 
-my %map_type = (
-    "instance" => "InstanceId",
-    "asg"      => "AutoScalingGroupName",
-);
-
 sub prefix_metric_output {
     my ($self, %options) = @_;
     
-    return ucfirst($options{instance_value}->{type}) . " '" . $options{instance_value}->{display} . "' " . $options{instance_value}->{stat} . " ";
+    return "Bucket '" . $options{instance_value}->{display} . "' " . $options{instance_value}->{stat} . " ";
 }
 
 sub set_counters {
     my ($self, %options) = @_;
     
     $self->{maps_counters_type} = [
-        { name => 'metric', type => 1, cb_prefix_output => 'prefix_metric_output', message_multiple => "All CPU metrics are ok", skipped_code => { -10 => 1 } },
+        { name => 'metric', type => 1, cb_prefix_output => 'prefix_metric_output', message_multiple => "All objects metrics are ok", skipped_code => { -10 => 1 } },
     ];
 
     foreach my $statistic ('minimum', 'maximum', 'average', 'sum') {
-        foreach my $metric ('CPUCreditBalance', 'CPUCreditUsage', 'CPUSurplusCreditBalance', 'CPUSurplusCreditsCharged') {
+        foreach my $metric ('NumberOfObjects') {
             my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
-                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'type' }, { name => 'stat' } ],
-                                output_template => $metric . ': %.2f',
+                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'stat' } ],
+                                output_template => $metric . ': %d objects',
                                 perfdatas => [
                                     { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
-                                      template => '%.2f', label_extra_instance => 1, instance_use => 'display_absolute' },
-                                ],
-                            }
-                        };
-            push @{$self->{maps_counters}->{metric}}, $entry;
-        }
-        foreach my $metric ('CPUUtilization') {
-            my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
-                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'type' }, { name => 'stat' } ],
-                                output_template => $metric . ': %.2f %%',
-                                perfdatas => [
-                                    { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
-                                      template => '%.2f', unit => '%', label_extra_instance => 1, instance_use => 'display_absolute' },
+                                      template => '%d', unit => 'objects', label_extra_instance => 1, instance_use => 'display_absolute' },
                                 ],
                             }
                         };
@@ -79,13 +62,12 @@ sub new {
     $self->{version} = '1.0';
     $options{options}->add_options(arguments =>
                                 {
-                                    "region:s"        => { name => 'region' },
-                                    "type:s"	      => { name => 'type' },
-                                    "name:s@"	      => { name => 'name' },
-                                    "filter-metric:s" => { name => 'filter_metric' },
-                                    "statistic:s@"    => { name => 'statistic' },
-                                    "timeframe:s"     => { name => 'timeframe', default => 600 },
-                                    "period:s"        => { name => 'period', default => 60 },
+                                    "region:s"         => { name => 'region' },
+                                    "name:s@"	       => { name => 'name' },
+                                    "filter-metric:s"  => { name => 'filter_metric' },
+                                    "statistic:s@"     => { name => 'statistic' },
+                                    "timeframe:s"      => { name => 'timeframe', default => 172800 },
+                                    "period:s"         => { name => 'period', default => 86400 },
                                 });
     
     return $self;
@@ -98,18 +80,6 @@ sub check_options {
     if (!defined($self->{option_results}->{region}) || $self->{option_results}->{region} eq '') {
         $self->{output}->add_option_msg(short_msg => "Need to specify --region option.");
         $self->{output}->option_exit();
-    }
-
-    if (!defined($self->{option_results}->{type}) || $self->{option_results}->{type} eq '') {
-        $self->{output}->add_option_msg(short_msg => "Need to specify --type option.");
-        $self->{output}->option_exit();
-    }
-
-    if ($self->{option_results}->{type} ne 'asg' && $self->{option_results}->{type} ne 'instance') {
-        $self->{output}->output_add(severity => 'OK',
-                                    short_msg => "Instance type '" . $self->{option_results}->{type} . "' is not handled for this mode");
-        $self->{output}->display(force_ignore_perfdata => 1);
-        $self->{output}->exit();
     }
 
     if (!defined($self->{option_results}->{name}) || $self->{option_results}->{name} eq '') {
@@ -133,8 +103,7 @@ sub check_options {
         }
     }
 
-    foreach my $metric ('CPUCreditBalance', 'CPUCreditUsage', 'CPUSurplusCreditBalance',
-        'CPUSurplusCreditsCharged', 'CPUUtilization') {
+    foreach my $metric ('NumberOfObjects') {
         next if (defined($self->{option_results}->{filter_metric}) && $self->{option_results}->{filter_metric} ne ''
             && $metric !~ /$self->{option_results}->{filter_metric}/);
 
@@ -149,20 +118,19 @@ sub manage_selection {
     foreach my $instance (@{$self->{aws_instance}}) {
         $metric_results{$instance} = $options{custom}->cloudwatch_get_metrics(
             region => $self->{option_results}->{region},
-            namespace => 'AWS/EC2',
-            dimensions => [ { Name => $map_type{$self->{option_results}->{type}}, Value => $instance } ],
+            namespace => 'AWS/S3',
+            dimensions => [ {Name => 'StorageType', Value => 'AllStorageTypes' }, { Name => 'BucketName', Value => $instance } ],
             metrics => $self->{aws_metrics},
             statistics => $self->{aws_statistics},
             timeframe => $self->{option_results}->{timeframe},
             period => $self->{option_results}->{period},
         );
-
+        
         foreach my $metric (@{$self->{aws_metrics}}) {
             foreach my $statistic (@{$self->{aws_statistics}}) {
                 next if (!defined($metric_results{$instance}->{$metric}->{lc($statistic)}));
 
                 $self->{metric}->{$instance . "_" . lc($statistic)}->{display} = $instance;
-                $self->{metric}->{$instance . "_" . lc($statistic)}->{type} = $self->{option_results}->{type};
                 $self->{metric}->{$instance . "_" . lc($statistic)}->{stat} = lc($statistic);
                 $self->{metric}->{$instance . "_" . lc($statistic)}->{$metric . "_" . lc($statistic)} = $metric_results{$instance}->{$metric}->{lc($statistic)};
             }
@@ -181,14 +149,13 @@ __END__
 
 =head1 MODE
 
-Check EC2 instances CPU metrics.
+Check S3 buckets number of objects.
 
 Example: 
-perl centreon_plugins.pl --plugin=cloud::aws::ec2::plugin --custommode=paws --mode=cpu --region='eu-west-1'
---type='asg' --name='centreon-middleware' --filter-metric='Credit' --statistic='average'
---critical-cpucreditusage-average='10' --verbose
+perl centreon_plugins.pl --plugin=cloud::aws::s3::plugin --custommode=paws --mode=objects --region='eu-west-1'
+--name='centreon-iso' --critical-numberofobjects-average='10' --verbose
 
-See 'https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/ec2-metricscollected.html' for more informations.
+See 'https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/s3-metricscollected.html' for more informations.
 
 =over 8
 
@@ -196,18 +163,13 @@ See 'https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/ec2-metricsc
 
 Set the region name (Required).
 
-=item B<--type>
-
-Set the instance type (Required) (Can be: 'asg', 'instance').
-
 =item B<--name>
 
 Set the instance name (Required) (Can be multiple).
 
 =item B<--filter-metric>
 
-Filter metrics (Can be: 'CPUCreditBalance', 'CPUCreditUsage', 
-'CPUSurplusCreditBalance', 'CPUSurplusCreditsCharged', 'CPUUtilization') 
+Filter metrics (Can be: 'NumberOfObjects') 
 (Can be a regexp).
 
 =item B<--statistic>
@@ -215,26 +177,24 @@ Filter metrics (Can be: 'CPUCreditBalance', 'CPUCreditUsage',
 Set cloudwatch statistics (Default: 'average')
 (Can be: 'minimum', 'maximum', 'average', 'sum').
 
-All satistics are valid.
+Valid statistics: 'average'.
 
 =item B<--period>
 
-Set period in seconds (Default: 60).
+Set period in seconds (Default: 86400).
 
 =item B<--timeframe>
 
-Set timeframe in seconds (Default: 600).
+Set timeframe in seconds (Default: 172800).
 
 =item B<--warning-$metric$-$statistic$>
 
-Thresholds warning ($metric$ can be: 'cpucreditusage', 'cpucreditbalance', 
-'cpusurpluscreditbalance', 'cpusurpluscreditscharged', 'cpuutilization', 
+Thresholds warning ($metric$ can be: 'numberofobjects', 
 $statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
 
 =item B<--critical-$metric$-$statistic$>
 
-Thresholds critical ($metric$ can be: 'cpucreditusage', 'cpucreditbalance', 
-'cpusurpluscreditbalance', 'cpusurpluscreditscharged', 'cpuutilization', 
+Thresholds critical ($metric$ can be: 'numberofobjects', 
 $statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
 
 =back

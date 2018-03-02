@@ -145,14 +145,14 @@ sub manage_selection {
             period => $self->{option_results}->{period},
         );
         
-        foreach my $metric (keys $metric_results{$instance}) {
-            foreach my $stat ('minimum', 'maximum', 'average', 'sum') {
-                next if (!defined($metric_results{$instance}->{$metric}->{$stat}));
+        foreach my $metric (@{$self->{aws_metrics}}) {
+            foreach my $statistic (@{$self->{aws_statistics}}) {
+                next if (!defined($metric_results{$instance}->{$metric}->{lc($statistic)}));
 
-                $self->{metric}->{$instance . "_" . $stat}->{display} = $instance;
-                $self->{metric}->{$instance . "_" . $stat}->{type} = $self->{option_results}->{type};
-                $self->{metric}->{$instance . "_" . $stat}->{stat} = $stat;
-                $self->{metric}->{$instance . "_" . $stat}->{$metric . "_" . $stat} = $metric_results{$instance}->{$metric}->{$stat};
+                $self->{metric}->{$instance . "_" . lc($statistic)}->{display} = $instance;
+                $self->{metric}->{$instance . "_" . lc($statistic)}->{type} = $self->{option_results}->{type};
+                $self->{metric}->{$instance . "_" . lc($statistic)}->{stat} = lc($statistic);
+                $self->{metric}->{$instance . "_" . lc($statistic)}->{$metric . "_" . lc($statistic)} = $metric_results{$instance}->{$metric}->{lc($statistic)};
             }
         }
     }
@@ -172,7 +172,7 @@ __END__
 Check RDS instances database connections.
 
 Example: 
-perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=rds-connections --region='eu-west-1'
+perl centreon_plugins.pl --plugin=cloud::aws::rds::plugin --custommode=paws --mode=connections --region='eu-west-1'
 --type='cluster' --name='centreon-db-ppd-cluster' --filter-metric='DatabaseConnections' --statistic='sum'
 --critical-databaseconnections-sum='10' --verbose
 
@@ -203,6 +203,8 @@ Filter metrics (Can be: 'DatabaseConnections')
 
 Set cloudwatch statistics (Default: 'average')
 (Can be: 'minimum', 'maximum', 'average', 'sum').
+
+All satistics are valid.
 
 =item B<--period>
 

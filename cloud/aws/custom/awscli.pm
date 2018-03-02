@@ -98,17 +98,13 @@ sub cloudwatch_get_metrics_set_cmd {
     my ($self, %options) = @_;
     
     return if (defined($self->{option_results}->{command_options}) && $self->{option_results}->{command_options} ne '');
-    
-    my $dimension;
+
+    my $cmd_options =
+        "cloudwatch get-metric-statistics --region $options{region} --namespace $options{namespace} --metric-name '$options{metric_name}' --start-time $options{start_time} --end-time $options{end_time} --period $options{period} --statistics " . join(' ', @{$options{statistics}}) . " --output json --dimensions";
     foreach my $entry (@{$options{dimensions}}) {
-        $dimension .= "Name=$entry->{Name},Value=$entry->{Value},";
+        $cmd_options .= " 'Name=$entry->{Name},Value=$entry->{Value}'";
     }
-    chop $dimension;
-    my $cmd_options = "cloudwatch get-metric-statistics --region $options{region} --namespace $options{namespace}"
-        . " --metric-name '$options{metric_name}' --start-time $options{start_time} --end-time $options{end_time}"
-        . " --period $options{period} --statistics " . join(' ', @{$options{statistics}})
-        . " --output json --dimensions '$dimension'";
-    
+
     return $cmd_options; 
 }
 

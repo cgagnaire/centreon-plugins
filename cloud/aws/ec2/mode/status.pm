@@ -212,8 +212,10 @@ __END__
 Check EC2 instances status metrics.
 
 Example: 
-perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=ec2-status --region='eu-west-1'
+perl centreon_plugins.pl --plugin=cloud::aws::ec2::plugin --custommode=paws --mode=status --region='eu-west-1'
 --type='asg' --name='centreon-middleware' --verbose
+
+See 'https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/ec2-metricscollected.html' for more informations.
 
 =over 8
 

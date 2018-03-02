@@ -25,34 +25,49 @@ use base qw(centreon::plugins::templates::counter);
 use strict;
 use warnings;
 
-sub prefix_elb_output {
+my $instance_mode;
+
+sub prefix_metric_output {
     my ($self, %options) = @_;
     
-    return "ELB '" . $options{instance_value}->{display} . " " . ucfirst($options{instance_value}->{stat}) . ": ";
+    return "ELB '" . $options{instance_value}->{display} . "' " . $options{instance_value}->{stat} . " ";
 }
 
 sub set_counters {
     my ($self, %options) = @_;
     
     $self->{maps_counters_type} = [
-        { name => 'elb_queue', type => 1, cb_prefix_output => 'prefix_elb_output', message_multiple => "ELB Queues are OK", skipped_code => { -10 => 1 } },
+        { name => 'metric', type => 1, cb_prefix_output => 'prefix_metric_output', message_multiple => "All queues metrics are ok", skipped_code => { -10 => 1 } },
     ];
 
-    foreach my $statistic (('minimum', 'maximum', 'average', 'sum')) {
-        foreach my $metric_name ('SpilloverCount', 'SurgeQueueLength') {
-            my $entry = { label => lc($metric_name), set => {
-                                key_values => [ { name => $metric_name . '_' . $statistic }, { name => 'stat' }, { name => 'display' } ],
-                                output_template => $metric_name . ': %d',
+    foreach my $statistic ('minimum', 'maximum', 'average', 'sum') {
+        foreach my $metric ('SpilloverCount') {
+            next if ($statistic =~ /minimum|maximum|average/); # Average, Minimum, and Maximum are reported per load balancer node and are not typically useful.
+            my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
+                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'stat' } ],
+                                output_template => $metric . ': %d',
                                 perfdatas => [
-                                    { label => lc($metric_name), value => $metric_name . '_' . $statistic . '_absolute',
+                                    { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
                                       template => '%d', label_extra_instance => 1, instance_use => 'display_absolute' },
                                 ],
                             }
                         };
-            push @{$self->{maps_counters}->{elb_queue}}, $entry;
+            push @{$self->{maps_counters}->{metric}}, $entry;
+        }
+        foreach my $metric ('SurgeQueueLength') {
+            next if ($statistic =~ /sum/); # Sum is not useful.
+            my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
+                                key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'stat' } ],
+                                output_template => $metric . ': %d',
+                                perfdatas => [
+                                    { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
+                                      template => '%d', label_extra_instance => 1, instance_use => 'display_absolute' },
+                                ],
+                            }
+                        };
+            push @{$self->{maps_counters}->{metric}}, $entry;
         }
     }
-
 }
 
 sub new {
@@ -63,13 +78,13 @@ sub new {
     $self->{version} = '1.0';
     $options{options}->add_options(arguments =>
                                 {
-                                "region:s"        => { name => 'region' },
-                                "elb-name:s@"	  => { name => 'elb_name' },
-                                "filter-metric:s" => { name => 'filter_metric' },
-                                "timeframe:s"     => { name => 'timeframe', default => 600 },
-                                "period:s"        => { name => 'period', default => 60 },
+                                    "region:s"         => { name => 'region' },
+                                    "name:s@"	       => { name => 'name' },
+                                    "filter-metric:s"  => { name => 'filter_metric' },
+                                    "statistic:s@"     => { name => 'statistic' },
+                                    "timeframe:s"      => { name => 'timeframe', default => 600 },
+                                    "period:s"         => { name => 'period', default => 60 },
                                 });
-    
     
     return $self;
 }
@@ -83,14 +98,24 @@ sub check_options {
         $self->{output}->option_exit();
     }
 
-    if (!defined($self->{option_results}->{elb_name}) || $self->{option_results}->{elb_name} eq '') {
-        $self->{output}->add_option_msg(short_msg => "Need to specify --elb-name option.");
+    if (!defined($self->{option_results}->{name}) || $self->{option_results}->{name} eq '') {
+        $self->{output}->add_option_msg(short_msg => "Need to specify --name option.");
         $self->{output}->option_exit();
     }
 
-    foreach my $elb_name (@{$self->{option_results}->{elb_name}}) {
-        if ($elb_name ne '') {
-            push @{$self->{elb_name}}, $elb_name;
+    foreach my $instance (@{$self->{option_results}->{name}}) {
+        if ($instance ne '') {
+            push @{$self->{aws_instance}}, $instance;
+        }
+    }
+
+    $self->{aws_statistics} = ['Sum', 'Maximum'];
+    if (defined($self->{option_results}->{statistic})) {
+        $self->{aws_statistics} = [];
+        foreach my $stat (@{$self->{option_results}->{statistic}}) {
+            if ($stat ne '') {
+                push @{$self->{aws_statistics}}, ucfirst(lc($stat));
+            }
         }
     }
 
@@ -101,31 +126,38 @@ sub check_options {
         push @{$self->{aws_metrics}}, $metric;
     }
 
+    $instance_mode = $self;
 }
 
 sub manage_selection {
     my ($self, %options) = @_;
 
-    foreach my $elb_name (@{$self->{elb_name}}) {
-        my $metric_results = $options{custom}->cloudwatch_get_metrics(
+    my %metric_results;
+    foreach my $instance (@{$self->{aws_instance}}) {
+        $metric_results{$instance} = $options{custom}->cloudwatch_get_metrics(
             region => $self->{option_results}->{region},
             namespace => 'AWS/ELB',
-            dimensions => [ { Name => 'LoadBalancerName', Value => $elb_name } ],
+            dimensions => [ { Name => 'LoadBalancerName', Value => $instance } ],
             metrics => $self->{aws_metrics},
-            statistics => ['Average', 'Maximum', 'Sum'],
+            statistics => $self->{aws_statistics},
             timeframe => $self->{option_results}->{timeframe},
             period => $self->{option_results}->{period},
         );
+        
+        foreach my $metric (@{$self->{aws_metrics}}) {
+            foreach my $statistic (@{$self->{aws_statistics}}) {
+                next if (!defined($metric_results{$instance}->{$metric}->{lc($statistic)}));
 
-	use Data::Dumper;
-        foreach my $elb_stat (keys %{$metric_results}) {
-            foreach my $stat (('average', 'sum', 'maximum')) {
-		my $value = (defined($metric_results->{$elb_stat}->{$stat})) ? $metric_results->{$elb_stat}->{$stat} : '0';
-                $self->{elb_queue}->{$elb_name . '_' . $stat}->{display} = $elb_name;
-                $self->{elb_queue}->{$elb_name . '_' . $stat}->{$elb_stat . '_' . $stat} = $value;
-                $self->{elb_queue}->{$elb_name . '_' . $stat}->{stat} = $stat;
+                $self->{metric}->{$instance . "_" . lc($statistic)}->{display} = $instance;
+                $self->{metric}->{$instance . "_" . lc($statistic)}->{stat} = lc($statistic);
+                $self->{metric}->{$instance . "_" . lc($statistic)}->{$metric . "_" . lc($statistic)} = $metric_results{$instance}->{$metric}->{lc($statistic)};
             }
         }
+    }
+
+    if (scalar(keys %{$self->{metric}}) <= 0) {
+        $self->{output}->add_option_msg(short_msg => 'No metrics detected, check your filter ? ');
+        $self->{output}->option_exit();
     }
 }
 
@@ -135,7 +167,13 @@ __END__
 
 =head1 MODE
 
-perl centreon_plugins.pl --plugin=cloud::aws::plugin --mode=elb-queues --custommode='paws' --aws-secret-key='feafEAAFAefea' --aws-access-key='feafaefeavcrg' --region='eu-west-1' --elb-name='elb-name' --verbose
+Check ELB surge queue.
+
+Example: 
+perl centreon_plugins.pl --plugin=cloud::aws::elb::plugin --custommode=paws --mode=queues --region='eu-west-1'
+--name='elb-www-fr' --critical-spillovercount-sum='10' --verbose
+
+See 'https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/elb-metricscollected.html' for more informations.
 
 =over 8
 
@@ -143,14 +181,22 @@ perl centreon_plugins.pl --plugin=cloud::aws::plugin --mode=elb-queues --customm
 
 Set the region name (Required).
 
-=item B<--elb-name>
+=item B<--name>
 
-Set the elb- name (Required, can be multiple).
+Set the instance name (Required) (Can be multiple).
 
 =item B<--filter-metric>
 
-Filter metrics (RequestCount, Latency)
+Filter metrics (Can be: 'SpilloverCount', 'SurgeQueueLength') 
 (Can be a regexp).
+
+=item B<--statistic>
+
+Set cloudwatch statistics (Default: 'sum', 'maximum')
+(Can be: 'minimum', 'maximum', 'average', 'sum').
+
+Most usefull statistics (SpilloverCount): 'sum'.
+Most usefull statistics (SurgeQueueLength): 'maximum'.
 
 =item B<--period>
 
@@ -162,17 +208,13 @@ Set timeframe in seconds (Default: 600).
 
 =item B<--warning-$metric$-$statistic$>
 
-Warning threshold.
-$metric (can be: surgequeuelength, spillovercount)
-$aggregation (can be: maximum, average, sum)
-
-=item B<--critical-latency-$aggregation>
-
-Critical threshold
-$metric (can be: surgequeuelength, spillovercount)
-$aggregation (can be: maximum, average, sum)
+Thresholds warning ($metric$ can be: 'spillovercount', 'surgequeuelength', 
+$statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
 
 =item B<--critical-$metric$-$statistic$>
+
+Thresholds critical ($metric$ can be: 'spillovercount', 'surgequeuelength', 
+$statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
 
 =back
 

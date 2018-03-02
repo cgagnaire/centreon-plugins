@@ -237,14 +237,14 @@ sub manage_selection {
             period => $self->{option_results}->{period},
         );
         
-        foreach my $metric (keys $metric_results{$instance}) {
-            foreach my $stat ('minimum', 'maximum', 'average', 'sum') {
-                next if (!defined($metric_results{$instance}->{$metric}->{$stat}));
+        foreach my $metric (@{$self->{aws_metrics}}) {
+            foreach my $statistic (@{$self->{aws_statistics}}) {
+                next if (!defined($metric_results{$instance}->{$metric}->{lc($statistic)}));
 
-                $self->{metric}->{$instance . "_" . $stat}->{display} = $instance;
-                $self->{metric}->{$instance . "_" . $stat}->{type} = $self->{option_results}->{type};
-                $self->{metric}->{$instance . "_" . $stat}->{stat} = $stat;
-                $self->{metric}->{$instance . "_" . $stat}->{$metric . "_" . $stat} = $metric_results{$instance}->{$metric}->{$stat};
+                $self->{metric}->{$instance . "_" . lc($statistic)}->{display} = $instance;
+                $self->{metric}->{$instance . "_" . lc($statistic)}->{type} = $self->{option_results}->{type};
+                $self->{metric}->{$instance . "_" . lc($statistic)}->{stat} = lc($statistic);
+                $self->{metric}->{$instance . "_" . lc($statistic)}->{$metric . "_" . lc($statistic)} = $metric_results{$instance}->{$metric}->{lc($statistic)};
             }
         }
     }
@@ -264,9 +264,11 @@ __END__
 Check EC2 instances network metrics.
 
 Example: 
-perl centreon_plugins.pl --plugin=cloud::aws::plugin --custommode=paws --mode=ec2-network --region='eu-west-1'
+perl centreon_plugins.pl --plugin=cloud::aws::ec2::plugin --custommode=paws --mode=network --region='eu-west-1'
 --type='asg' --name='centreon-middleware' --filter-metric='Packets' --statistic='sum'
 --critical-networkpacketsout-sum='10' --verbose
+
+See 'https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/ec2-metricscollected.html' for more informations.
 
 =over 8
 
@@ -292,6 +294,8 @@ Filter metrics (Can be: 'NetworkIn', 'NetworkOut',
 
 Set cloudwatch statistics (Default: 'average')
 (Can be: 'minimum', 'maximum', 'average', 'sum').
+
+All satistics are valid.
 
 =item B<--period>
 
