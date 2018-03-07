@@ -48,7 +48,6 @@ sub set_counters {
             my $entry = { label => lc($metric) . '-' . lc($statistic), set => {
                                 key_values => [ { name => $metric . '_' . $statistic }, { name => 'display' }, { name => 'type' }, { name => 'stat' } ],
                                 output_template => $metric . ': %d queries/s',
-                                output_change_bytes => 1,
                                 perfdatas => [
                                     { label => lc($metric) . '_' . lc($statistic), value => $metric . '_' . $statistic . '_absolute', 
                                       template => '%d', unit => 'queries/s', min => 0, label_extra_instance => 1, instance_use => 'display_absolute' },

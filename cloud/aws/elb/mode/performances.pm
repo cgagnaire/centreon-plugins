@@ -87,8 +87,8 @@ sub new {
     $options{options}->add_options(arguments =>
                                 {
                                     "region:s"              => { name => 'region' },
-                                    "type:s"	            => { name => 'type' },
-                                    "name:s@"	            => { name => 'name' },
+                                    "type:s"                => { name => 'type' },
+                                    "name:s@"               => { name => 'name' },
                                     "availability-zone:s"   => { name => 'availability_zone' },
                                     "filter-metric:s"       => { name => 'filter_metric' },
                                     "statistic:s@"          => { name => 'statistic' },

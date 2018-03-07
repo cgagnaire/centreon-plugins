@@ -164,7 +164,7 @@ sub new {
                                     "statistic:s@"    => { name => 'statistic' },
                                     "timeframe:s"     => { name => 'timeframe', default => 600 },
                                     "period:s"        => { name => 'period', default => 60 },
-				                    "per-sec"	      => { name => 'per_sec' },
+                                    "per-sec"         => { name => 'per_sec' },
                                 });
     
     return $self;
@@ -307,14 +307,14 @@ Set timeframe in seconds (Default: 600).
 
 =item B<--warning-$metric$-$statistic$>
 
-Thresholds warning ($metric$ can be: 'networkin', 'networkout', 
-'networkpacketsin', 'networkpacketsout', 
+Thresholds warning ($metric$ can be: 'diskreadbytes', 'diskwritebytes',
+'diskreadops', 'diskwriteops', 
 $statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
 
 =item B<--critical-$metric$-$statistic$>
 
-Thresholds critical ($metric$ can be: 'networkin', 'networkout', 
-'networkpacketsin', 'networkpacketsout', 
+Thresholds critical ($metric$ can be: 'diskreadbytes', 'diskwritebytes',
+'diskreadops', 'diskwriteops',
 $statistic$ can be: 'minimum', 'maximum', 'average', 'sum').
 
 =item B<--per-sec>

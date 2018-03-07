@@ -137,7 +137,7 @@ sub new {
                                     "statistic:s@"    => { name => 'statistic' },
                                     "timeframe:s"     => { name => 'timeframe', default => 300 },
                                     "period:s"        => { name => 'period', default => 60 },
-				                    "per-sec"	      => { name => 'per_sec' },
+                                    "per-sec"	      => { name => 'per_sec' },
                                 });
     
     return $self;
