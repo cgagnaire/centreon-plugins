@@ -176,9 +176,10 @@ sub cloudwatch_list_metrics {
     my $metric_results = [];
     eval {
         my $cw = Paws->service('CloudWatch', region => $options{region});
-        my %options = ();
-        $options{Namespace} = $options{namespace} if (defined($options{namespace}));
-        while ((my $list_metrics = $cw->ListMetrics(%options))) {
+        my %cw_options = ();
+        $cw_options{Namespace} = $options{namespace} if (defined($options{namespace}));
+        $cw_options{MetricName} = $options{metric} if (defined($options{metric}));
+        while ((my $list_metrics = $cw->ListMetrics(%cw_options))) {
             foreach (@{$list_metrics->{Metrics}}) {
                 my $dimensions = [];
                 foreach my $dimension (@{$_->{Dimensions}}) {
@@ -192,7 +193,7 @@ sub cloudwatch_list_metrics {
             }
             
             last if (!defined($list_metrics->{NextToken}));
-            $options{NextToken} = $list_metrics->{NextToken};
+            $cw_options{NextToken} = $list_metrics->{NextToken};
         }
     };
     if ($@) {
@@ -210,8 +211,10 @@ sub ec2_get_instances_status {
     eval {
         my $ec2 = Paws->service('EC2', region => $options{region});
         my $instances = $ec2->DescribeInstanceStatus(DryRun => 0, IncludeAllInstances => 1);
+        
         foreach (@{$instances->{InstanceStatuses}}) {
-            $instance_results->{$_->{InstanceId}} = { state => $_->{InstanceState}->{Name} };
+            $instance_results->{$_->{InstanceId}} = { state => $_->{InstanceState}->{Name},
+                                                      status => => $_->{InstanceStatus}->{Status} };
         }
     };
     if ($@) {
@@ -220,6 +223,45 @@ sub ec2_get_instances_status {
     }
     
     return $instance_results;
+}
+
+sub ec2_list_resources {
+    my ($self, %options) = @_;
+    
+    my $resource_results = [];
+    eval {
+        my $ec2 = Paws->service('EC2', region => $options{region});
+        my $list_instances = $ec2->DescribeInstances(DryRun => 0);
+        
+        foreach my $reservation (@{$list_instances->{Reservations}}) {
+            foreach my $instance (@{$reservation->{Instances}}) {
+                foreach my $tag (@{$instance->{Tags}}) {
+                    my %already = map { $_->{Name} => $_ } @{$resource_results};
+                    if ($tag->{Key} eq "aws:autoscaling:groupName") {
+                        next if (defined($already{$tag->{Value}}));
+                        push @{$resource_results}, { 
+                            Name => $tag->{Value},
+                            Type => 'asg',
+                        };
+                    }
+                }
+                push @{$resource_results}, { 
+                    Name => $instance->{InstanceId},
+                    Type => 'instance',
+                    AvailabilityZone => $instance->{Placement}->{AvailabilityZone},
+                    InstanceType => $instance->{InstanceType},
+                    State => $instance->{State}->{Name},
+                };
+                
+            }
+        }
+    };
+    if ($@) {
+        $self->{output}->add_option_msg(short_msg => "error: $@");
+        $self->{output}->option_exit();
+    }
+    
+    return $resource_results;
 }
 
 sub rds_get_instances_status {
@@ -239,6 +281,57 @@ sub rds_get_instances_status {
     }
     
     return $instance_results;
+}
+
+sub rds_list_instances {
+    my ($self, %options) = @_;
+    
+    my $instance_results = [];
+    eval {
+        my $rds = Paws->service('RDS', region => $options{region});
+        my $list_instances = $rds->DescribeDBInstances();
+        
+        foreach my $instance (@{$list_instances->{DBInstances}}) {
+            push @{$instance_results}, {
+                Name => $instance->{DBInstanceIdentifier},
+                AvailabilityZone => $instance->{AvailabilityZone},
+                Engine => $instance->{Engine},
+                StorageType => $instance->{StorageType},
+                DBInstanceStatus => $instance->{DBInstanceStatus},
+            };
+        }
+    };
+    if ($@) {
+        $self->{output}->add_option_msg(short_msg => "error: $@");
+        $self->{output}->option_exit();
+    }
+    
+    return $instance_results;
+}
+
+sub rds_list_clusters {
+    my ($self, %options) = @_;
+    
+    my $cluster_results = [];
+    eval {
+        my $rds = Paws->service('RDS', region => $options{region});
+        my $list_clusters = $rds->DescribeDBClusters();
+        
+        foreach my $cluster (@{$list_clusters->{DBClusters}}) {
+            push @{$cluster_results}, {
+                Name => $cluster->{DBClusterIdentifier},
+                DatabaseName => $cluster->{DatabaseName},
+                Engine => $cluster->{Engine},
+                Status => $cluster->{Status},
+            };
+        }
+    };
+    if ($@) {
+        $self->{output}->add_option_msg(short_msg => "error: $@");
+        $self->{output}->option_exit();
+    }
+    
+    return $cluster_results;
 }
 
 1;

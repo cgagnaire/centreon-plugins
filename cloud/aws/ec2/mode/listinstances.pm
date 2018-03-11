@@ -18,7 +18,7 @@
 # limitations under the License.
 #
 
-package cloud::aws::mode::cloudwatchlistmetrics;
+package cloud::aws::ec2::mode::listinstances;
 
 use base qw(centreon::plugins::mode);
 
@@ -33,8 +33,7 @@ sub new {
     $self->{version} = '1.0';
     $options{options}->add_options(arguments =>
                                 {
-                                "region:s"      => { name => 'region' },
-                                "namespace:s"   => { name => 'namespace' },
+                                    "region:s"      => { name => 'region' },
                                 });
 
     return $self;
@@ -53,33 +52,21 @@ sub check_options {
 sub manage_selection {
     my ($self, %options) = @_;
 
-    $self->{metrics} = $options{custom}->cloudwatch_list_metrics(region => $self->{option_results}->{region}, namespace => $self->{option_results}->{namespace});
-}
-
-sub get_dimensions_str {
-    my ($self, %options) = @_;
-    
-    my $dimensions = '';
-    my $append = '';
-    foreach (@{$options{dimensions}}) {
-        $dimensions .= $append . "Name=$_->{Name},Value=$_->{Value}";
-        $append = ',';
-    }
-    
-    return $dimensions;
+    $self->{instances} = $options{custom}->ec2_list_resources(region => $self->{option_results}->{region});
 }
 
 sub run {
     my ($self, %options) = @_;
 
     $self->manage_selection(%options);
-    foreach (@{$self->{metrics}}) {
-        $self->{output}->output_add(long_msg => sprintf("[Namespace = %s][Dimensions = %s][Metric = %s]",
-            $_->{Namespace}, $self->get_dimensions_str(dimensions => $_->{Dimensions}), $_->{MetricName}));
+    foreach (@{$self->{instances}}) {
+        next if ($_->{Type} !~ m/instance/);
+        $self->{output}->output_add(long_msg => sprintf("[Name = %s][AvailabilityZone = %s][InstanceType = %s][State = %s]",
+            $_->{Name}, $_->{AvailabilityZone}, $_->{InstanceType}, $_->{State}));
     }
     
     $self->{output}->output_add(severity => 'OK',
-                                short_msg => 'List metrics:');
+                                short_msg => 'List instances:');
     $self->{output}->display(nolabel => 1, force_ignore_perfdata => 1, force_long_output => 1);
     $self->{output}->exit();
 }
@@ -87,18 +74,20 @@ sub run {
 sub disco_format {
     my ($self, %options) = @_;
     
-    $self->{output}->add_disco_format(elements => ['namespace', 'metric', 'dimensions']);
+    $self->{output}->add_disco_format(elements => ['name', 'availabilityzone', 'instancetype', 'state']);
 }
 
 sub disco_show {
     my ($self, %options) = @_;
 
     $self->manage_selection(%options);
-    foreach (@{$self->{metrics}}) {
+    foreach (@{$self->{instances}}) {
+        next if ($_->{Type} !~ m/instance/);
         $self->{output}->add_disco_entry(
-            namespace => $_->{Namespace},
-            metric => $_->{MetricName},
-            dimensions => $self->get_dimensions_str(dimensions => $_->{Dimensions}),
+            name => $_->{Name},
+            availabilityzone => $_->{AvailabilityZone},
+            instancetype => $_->{InstanceType},
+            state => $_->{State},
         );
     }
 }
@@ -109,17 +98,13 @@ __END__
 
 =head1 MODE
 
-List cloudwatch metrics.
+List EC2 instances.
 
 =over 8
 
 =item B<--region>
 
 Set the region name (Required).
-
-=item B<--namespace>
-
-Set cloudwatch namespace.
 
 =back
 

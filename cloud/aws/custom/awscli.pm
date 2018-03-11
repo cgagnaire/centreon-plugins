@@ -42,8 +42,8 @@ sub new {
     if (!defined($options{noptions})) {
         $options{options}->add_options(arguments => 
                     {                      
-                    "aws-secret-key:s"  => { name => 'aws_secret_key' },
-                    "aws-access-key:s"  => { name => 'aws_access_key' },
+                    "aws-secret-key:s"    => { name => 'aws_secret_key' },
+                    "aws-access-key:s"    => { name => 'aws_access_key' },
                     "timeout:s"           => { name => 'timeout', default => 50 },
                     "sudo"                => { name => 'sudo' },
                     "command:s"           => { name => 'command', default => 'aws' },
@@ -98,12 +98,13 @@ sub cloudwatch_get_metrics_set_cmd {
     my ($self, %options) = @_;
     
     return if (defined($self->{option_results}->{command_options}) && $self->{option_results}->{command_options} ne '');
+
     my $cmd_options =
         "cloudwatch get-metric-statistics --region $options{region} --namespace $options{namespace} --metric-name '$options{metric_name}' --start-time $options{start_time} --end-time $options{end_time} --period $options{period} --statistics " . join(' ', @{$options{statistics}}) . " --output json --dimensions";
     foreach my $entry (@{$options{dimensions}}) {
         $cmd_options .= " 'Name=$entry->{Name},Value=$entry->{Value}'";
     }
-    
+
     return $cmd_options; 
 }
 
@@ -210,6 +211,8 @@ sub cloudwatch_list_metrics_set_cmd {
     
     return if (defined($self->{option_results}->{command_options}) && $self->{option_results}->{command_options} ne '');
     my $cmd_options = "cloudwatch list-metrics --region $options{region} --output json";
+    $cmd_options .= " --namespace $options{namespace}" if defined($options{namespace});
+    $cmd_options .= " --metric-name $options{metric}" if defined($options{metric});
     return $cmd_options; 
 }
 
@@ -268,10 +271,67 @@ sub ec2_get_instances_status {
     
     my $instance_results = {};
     foreach (@{$list_instances->{InstanceStatuses}}) {
-        $instance_results->{$_->{InstanceId}} = { state => $_->{InstanceState}->{Name} };
+        $instance_results->{$_->{InstanceId}} = { state => $_->{InstanceState}->{Name}, 
+                                                  status => => $_->{InstanceStatus}->{Status} };
     }
     
     return $instance_results;
+}
+
+sub ec2_list_resources_set_cmd {
+    my ($self, %options) = @_;
+    
+    return if (defined($self->{option_results}->{command_options}) && $self->{option_results}->{command_options} ne '');
+    my $cmd_options = "ec2 describe-instances --no-dry-run --region $options{region} --output json";
+    return $cmd_options; 
+}
+
+sub ec2_list_resources {
+    my ($self, %options) = @_;
+    
+    my $cmd_options = $self->ec2_list_resources_set_cmd(%options);
+    my ($response) = centreon::plugins::misc::execute(
+            output => $self->{output},
+            options => $self->{option_results},
+            sudo => $self->{option_results}->{sudo},
+            command => $self->{option_results}->{command},
+            command_path => $self->{option_results}->{command_path},
+            command_options => $cmd_options
+    );
+    my $list_instances;
+    eval {
+        $list_instances = JSON::XS->new->utf8->decode($response);
+    };
+    if ($@) {
+        $self->{output}->add_option_msg(short_msg => "Cannot decode json response: $@");
+        $self->{output}->option_exit();
+    }
+    
+    my $resource_results = [];
+    foreach my $reservation (@{$list_instances->{Reservations}}) {
+        foreach my $instance (@{$reservation->{Instances}}) {
+            foreach my $tag (@{$instance->{Tags}}) {
+                my %already = map { $_->{Name} => $_ } @{$resource_results};
+                if ($tag->{Key} eq "aws:autoscaling:groupName") {
+                    next if (defined($already{$tag->{Value}}));
+                    push @{$resource_results}, { 
+                        Name => $tag->{Value},
+                        Type => 'asg',
+                    };
+                }
+            }
+            push @{$resource_results}, { 
+                Name => $instance->{InstanceId},
+                Type => 'instance',
+                AvailabilityZone => $instance->{Placement}->{AvailabilityZone},
+                InstanceType => $instance->{InstanceType},
+                State => $instance->{State}->{Name},
+            };
+            
+        }
+    }
+    
+    return $resource_results;
 }
 
 sub rds_get_instances_status_set_cmd {
@@ -309,6 +369,91 @@ sub rds_get_instances_status {
     }
     
     return $instance_results;
+}
+
+sub rds_list_instances_set_cmd {
+    my ($self, %options) = @_;
+    
+    return if (defined($self->{option_results}->{command_options}) && $self->{option_results}->{command_options} ne '');
+    my $cmd_options = "rds describe-db-instances --region $options{region} --output json";
+    return $cmd_options; 
+}
+
+sub rds_list_instances {
+    my ($self, %options) = @_;
+    
+    my $cmd_options = $self->rds_get_instances_status_set_cmd(%options);
+    my ($response) = centreon::plugins::misc::execute(
+            output => $self->{output},
+            options => $self->{option_results},
+            sudo => $self->{option_results}->{sudo},
+            command => $self->{option_results}->{command},
+            command_path => $self->{option_results}->{command_path},
+            command_options => $cmd_options
+    );
+    my $list_instances;
+    eval {
+        $list_instances = JSON::XS->new->utf8->decode($response);
+    };
+    if ($@) {
+        $self->{output}->add_option_msg(short_msg => "Cannot decode json response: $@");
+        $self->{output}->option_exit();
+    }
+    
+    my $instance_results = [];
+    foreach my $instance (@{$list_instances->{DBInstances}}) {
+        push @{$instance_results}, {
+            Name => $instance->{DBInstanceIdentifier},
+            AvailabilityZone => $instance->{AvailabilityZone},
+            Engine => $instance->{Engine},
+            StorageType => $instance->{StorageType},
+            DBInstanceStatus => $instance->{DBInstanceStatus},
+        };
+    }
+    
+    return $instance_results;
+}
+
+sub rds_list_clusters_set_cmd {
+    my ($self, %options) = @_;
+    
+    return if (defined($self->{option_results}->{command_options}) && $self->{option_results}->{command_options} ne '');
+    my $cmd_options = "rds describe-db-clusters --region $options{region} --output json";
+    return $cmd_options; 
+}
+
+sub rds_list_clusters {
+    my ($self, %options) = @_;
+    
+    my $cmd_options = $self->rds_list_clusters_set_cmd(%options);
+    my ($response) = centreon::plugins::misc::execute(
+            output => $self->{output},
+            options => $self->{option_results},
+            sudo => $self->{option_results}->{sudo},
+            command => $self->{option_results}->{command},
+            command_path => $self->{option_results}->{command_path},
+            command_options => $cmd_options
+    );
+    my $list_clusters;
+    eval {
+        $list_clusters = JSON::XS->new->utf8->decode($response);
+    };
+    if ($@) {
+        $self->{output}->add_option_msg(short_msg => "Cannot decode json response: $@");
+        $self->{output}->option_exit();
+    }
+    
+    my $cluster_results = [];
+    foreach my $cluster (@{$list_clusters->{DBClusters}}) {
+        push @{$cluster_results}, {
+            Name => $cluster->{DBClusterIdentifier},
+            DatabaseName => $cluster->{DatabaseName},
+            Engine => $cluster->{Engine},
+            Status => $cluster->{Status},
+        };
+    }
+    
+    return $cluster_results;
 }
 
 1;

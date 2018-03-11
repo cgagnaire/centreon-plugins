@@ -18,7 +18,7 @@
 # limitations under the License.
 #
 
-package cloud::aws::mode::cloudwatchgetmetrics;
+package cloud::aws::cloudwatch::mode::getmetrics;
 
 use base qw(centreon::plugins::templates::counter);
 

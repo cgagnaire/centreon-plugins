@@ -18,7 +18,7 @@
 # limitations under the License.
 #
 
-package cloud::aws::plugin;
+package cloud::aws::cloudwatch::plugin;
 
 use strict;
 use warnings;
@@ -31,11 +31,9 @@ sub new {
 
     $self->{version} = '0.1';
     %{ $self->{modes} } = (
-        'cloudwatch-get-alarms'     => 'cloud::aws::mode::cloudwatchgetalarms',
-        'cloudwatch-get-metrics'    => 'cloud::aws::mode::cloudwatchgetmetrics',
-        'cloudwatch-list-metrics'   => 'cloud::aws::mode::cloudwatchlistmetrics',
-        'ec2-instance-status'       => 'cloud::aws::mode::ec2instancestatus',
-        'rds-instance-status'       => 'cloud::aws::mode::rdsinstancestatus',
+        'get-alarms'            => 'cloud::aws::cloudwatch::mode::getalarms',
+        'get-metrics'           => 'cloud::aws::cloudwatch::mode::getmetrics',
+        'list-metrics'          => 'cloud::aws::cloudwatch::mode::listmetrics',
     );
 
     $self->{custom_modes}{paws} = 'cloud::aws::custom::paws';
@@ -49,6 +47,6 @@ __END__
 
 =head1 PLUGIN DESCRIPTION
 
-Check Amazon AWS cloud.
+Check Amazon CloudWatch.
 
 =cut

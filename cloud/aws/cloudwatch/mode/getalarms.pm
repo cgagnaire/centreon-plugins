@@ -18,7 +18,7 @@
 # limitations under the License.
 #
 
-package cloud::aws::mode::cloudwatchgetalarms;
+package cloud::aws::cloudwatch::mode::getalarms;
 
 use base qw(centreon::plugins::templates::counter);
 
