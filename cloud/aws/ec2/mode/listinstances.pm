@@ -29,7 +29,7 @@ sub new {
     my ($class, %options) = @_;
     my $self = $class->SUPER::new(package => __PACKAGE__, %options);
     bless $self, $class;
-    
+
     $self->{version} = '1.0';
     $options{options}->add_options(arguments =>
                                 {
@@ -42,7 +42,7 @@ sub new {
 sub check_options {
     my ($self, %options) = @_;
     $self->SUPER::init(%options);
-    
+
     if (!defined($self->{option_results}->{region}) || $self->{option_results}->{region} eq '') {
         $self->{output}->add_option_msg(short_msg => "Need to specify --region option.");
         $self->{output}->option_exit();
@@ -61,10 +61,10 @@ sub run {
     $self->manage_selection(%options);
     foreach (@{$self->{instances}}) {
         next if ($_->{Type} !~ m/instance/);
-        $self->{output}->output_add(long_msg => sprintf("[Name = %s][AvailabilityZone = %s][InstanceType = %s][State = %s]",
-            $_->{Name}, $_->{AvailabilityZone}, $_->{InstanceType}, $_->{State}));
+        $self->{output}->output_add(long_msg => sprintf("[Name = %s][AvailabilityZone = %s][InstanceType = %s][State = %s][Tags = %s]",
+            $_->{Name}, $_->{AvailabilityZone}, $_->{InstanceType}, $_->{State}, defined($_->{Tags}) ? $_->{Tags} : "none"));
     }
-    
+
     $self->{output}->output_add(severity => 'OK',
                                 short_msg => 'List instances:');
     $self->{output}->display(nolabel => 1, force_ignore_perfdata => 1, force_long_output => 1);
@@ -73,7 +73,7 @@ sub run {
 
 sub disco_format {
     my ($self, %options) = @_;
-    
+
     $self->{output}->add_disco_format(elements => ['name', 'availabilityzone', 'instancetype', 'state']);
 }
 
@@ -88,6 +88,7 @@ sub disco_show {
             availabilityzone => $_->{AvailabilityZone},
             instancetype => $_->{InstanceType},
             state => $_->{State},
+            tags => defined($_->{Tags}) ? $_->{Tags} : "none",
         );
     }
 }
@@ -109,4 +110,3 @@ Set the region name (Required).
 =back
 
 =cut
-    

@@ -310,24 +310,27 @@ sub ec2_list_resources {
     my $resource_results = [];
     foreach my $reservation (@{$list_instances->{Reservations}}) {
         foreach my $instance (@{$reservation->{Instances}}) {
+            my @instance_tags;
             foreach my $tag (@{$instance->{Tags}}) {
                 my %already = map { $_->{Name} => $_ } @{$resource_results};
                 if ($tag->{Key} eq "aws:autoscaling:groupName") {
                     next if (defined($already{$tag->{Value}}));
-                    push @{$resource_results}, { 
+                    push @{$resource_results}, {
                         Name => $tag->{Value},
                         Type => 'asg',
                     };
+                } elsif ($tag->{Key} eq "Name" && defined($tag->{Value})) {
+                    push @instance_tags, $tag->{Value};
                 }
             }
-            push @{$resource_results}, { 
+            push @{$resource_results}, {
                 Name => $instance->{InstanceId},
                 Type => 'instance',
                 AvailabilityZone => $instance->{Placement}->{AvailabilityZone},
                 InstanceType => $instance->{InstanceType},
                 State => $instance->{State}->{Name},
+                Tags => join(",", @instance_tags),
             };
-            
         }
     }
     
