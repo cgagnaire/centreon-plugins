@@ -31,6 +31,7 @@ sub new {
 
     $self->{version} = '0.1';
     %{ $self->{modes} } = (
+        'asg-instances"         => 'cloud::aws::ec2::mode::asginstances',
         'cpu'                   => 'cloud::aws::ec2::mode::cpu',
         'diskio'                => 'cloud::aws::ec2::mode::diskio',
         'network'               => 'cloud::aws::ec2::mode::network',
