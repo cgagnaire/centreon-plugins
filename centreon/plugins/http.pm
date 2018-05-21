@@ -23,7 +23,9 @@ package centreon::plugins::http;
 use strict;
 use warnings;
 use centreon::plugins::useragent;
-use HTTP::Cookies;
+use HTTP::CookieJar::LWP;
+use Data::Dumper;
+use vars qw($cookies);
 use URI;
 use IO::Socket::SSL;
 
@@ -42,8 +44,10 @@ sub new {
         unknown_status => '%{http_code} < 200 or %{http_code} >= 300',
         warning_status => undef,
         critical_status => undef,
+        cookies_dir => '/var/lib/centreon/centplugins',
     };
     $self->{add_headers} = {};
+    
     return $self;
 }
 
@@ -73,16 +77,12 @@ sub check_options {
         $self->{output}->add_option_msg(short_msg => "Please set the hostname option");
         $self->{output}->option_exit();
     }
-    if ((defined($options{request}->{credentials})) && (!defined($options{request}->{username}) || !defined($options{request}->{password}))) {
-        $self->{output}->add_option_msg(short_msg => "You need to set --username= and --password= options when --credentials is used");
-        $self->{output}->option_exit();
-    }
     if ((defined($options{request}->{pkcs12})) && (!defined($options{request}->{cert_file}) && !defined($options{request}->{cert_pwd}))) {
         $self->{output}->add_option_msg(short_msg => "You need to set --cert-file= and --cert-pwd= options when --pkcs12 is used");
         $self->{output}->option_exit();
     }
 
-    $options{request}->{port} = $self->get_port_request();
+    $options{request}->{port} = $self->get_port();
 
     $options{request}->{headers} = {};
     if (defined($options{request}->{header})) {
@@ -160,14 +160,10 @@ sub get_port {
     return $port;
 }
 
-sub get_port_request {
+sub get_hostname {
     my ($self, %options) = @_;
 
-    my $port = '';
-    if (defined($self->{options}->{port}) && $self->{options}->{port} ne '') {
-        $port = $self->{options}->{port};
-    }
-    return $port;
+    return $self->{options}->{hostname};
 }
 
 sub set_proxy {
@@ -211,12 +207,15 @@ sub request {
     $self->check_options(request => $request_options);
 
     if (!defined($self->{ua})) {
-        $self->{ua} = centreon::plugins::useragent->new(keep_alive => 1, protocols_allowed => ['http', 'https'], timeout => $request_options->{timeout},
-                                                        credentials => $request_options->{credentials}, username => $request_options->{username}, password => $request_options->{password});
-        if (defined($request_options->{cookies_file})) {
-            $self->{ua}->cookie_jar(HTTP::Cookies->new(file => $request_options->{cookies_file},
-                                                       autosave => 1));
-        }
+        $self->{ua} = centreon::plugins::useragent->new(
+            keep_alive => 1,
+            protocols_allowed => ['http', 'https'],
+            timeout => $request_options->{timeout},
+            username => $request_options->{username},
+            password => $request_options->{password},
+            proxy_username => $request_options->{proxy_username},
+            proxy_password => $request_options->{proxy_password},
+            cookie_jar => HTTP::CookieJar::LWP->new);
     }
     if (defined($request_options->{no_follow})) {
         $self->{ua}->requests_redirectable(undef);
@@ -266,17 +265,21 @@ sub request {
         }
     }
 
-    if (defined($request_options->{credentials}) && defined($request_options->{ntlmv2})) {
+    if (defined($request_options->{ntlmv2})) {
         centreon::plugins::misc::mymodule_load(output => $self->{output}, module => 'Authen::NTLM',
                                                error_msg => "Cannot load module 'Authen::NTLM'.");
         Authen::NTLM::ntlmv2(1);
     }
 
-    if (defined($request_options->{credentials}) && defined($request_options->{basic})) {
+    if (defined($request_options->{basic}) && defined($request_options->{username}) && defined($request_options->{password})) {
         $req->authorization_basic($request_options->{username}, $request_options->{password});
     }
 
     $self->set_proxy(request => $request_options, url => $url);
+
+    if (defined($request_options->{proxy_basic}) && defined($request_options->{proxy_username}) && defined($request_options->{proxy_password})) {
+        $req->proxy_authorization_basic($request_options->{proxy_username}, $request_options->{proxy_password});
+    }
 
     if (defined($request_options->{cert_pkcs12}) && $request_options->{cert_file} ne '' && $request_options->{cert_pwd} ne '') {
         eval "use Net::SSL"; die $@ if $@;
@@ -288,8 +291,13 @@ sub request {
         my $context = new IO::Socket::SSL::SSL_Context(eval $self->{ssl_context});
         IO::Socket::SSL::set_default_context($context);
     }
+    
+    $self->{cache_name} = "http_" . $self->get_hostname() . '_' . $self->get_port();
+    $self->load_cookies();
 
     $response = $self->{ua}->request($req);
+
+    $self->save_cookies();
 
     # Check response
     my $status = 'ok';
@@ -303,10 +311,10 @@ sub request {
             eval "$request_options->{critical_status}") {
             $status = 'critical';
         } elsif (defined($request_options->{warning_status}) && $request_options->{warning_status} ne '' &&
-                 eval "$request_options->{warning_status}") {
+            eval "$request_options->{warning_status}") {
             $status = 'warning';
         } elsif (defined($request_options->{unknown_status}) && $request_options->{unknown_status} ne '' &&
-                 eval "$request_options->{unknown_status}") {
+            eval "$request_options->{unknown_status}") {
             $status = 'unknown';
         }
     };
@@ -344,6 +352,44 @@ sub get_response {
     my ($self, %options) = @_;
 
     return $self->{response};
+}
+
+sub load_cookies {
+    my ($self, %options) = @_;
+
+    if (! -e $self->{options}->{cookies_dir} . "/" . $self->{cache_name}) {
+        if (! -w $self->{options}->{cookies_dir}) {
+            $self->{output}->add_option_msg(short_msg =>  "Cannot write cookies file '" . $self->{options}->{cookies_dir} . "/" . $self->{cache_name} . "'. Need write permissions on directory.");
+            $self->{output}->option_exit();
+        }
+        return 0;
+    } elsif (! -w $self->{options}->{cookies_dir} . "/" . $self->{cache_name}) {
+        $self->{output}->add_option_msg(short_msg => "Cannot write cookies file '" . $self->{options}->{cookies_dir} . "/" . $self->{cache_name} . "'. Need write permissions on file.");
+        $self->{output}->option_exit();
+        return 1;
+    } elsif (! -s $self->{options}->{cookies_dir} . "/" . $self->{cache_name}) {
+        # Empty file. Not a problem.
+        return 0;
+    }
+
+    unless (my $return = do $self->{options}->{cookies_dir} . "/" . $self->{cache_name}) {
+        return 0;
+    }
+
+    $self->{ua}->cookie_jar->load_cookies(@{$cookies});
+}
+
+sub save_cookies {
+    my ($self, %options) = @_;
+
+    my @cookies;
+    foreach my $cookie ($self->{ua}->cookie_jar->dump_cookies) {
+        push @cookies, $cookie;
+    }
+
+    open FILE, ">", $self->{options}->{cookies_dir} . "/" . $self->{cache_name};
+    print FILE Data::Dumper->Dump([\@cookies], ["cookies"]);
+    close FILE;
 }
 
 1;

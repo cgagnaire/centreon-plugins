@@ -32,18 +32,20 @@ sub new {
     $self = LWP::UserAgent::new(@_);
     $self->agent("centreon::plugins::useragent");
 
-    $self->{credentials} = $options{credentials} if defined($options{credentials});
     $self->{username} = $options{username} if defined($options{username});
     $self->{password} = $options{password} if defined($options{password});
+    $self->{proxy_username} = $options{proxy_username} if defined($options{proxy_username});
+    $self->{proxy_password} = $options{proxy_password} if defined($options{proxy_password});
 
     return $self;
 }
 
 sub get_basic_credentials {
     my($self, $realm, $uri, $proxy) = @_;
-    return if $proxy;
-    return $self->{username}, $self->{password} if $self->{credentials} and wantarray;
-    return $self->{username}.":".$self->{password} if $self->{credentials};
+    return $self->{proxy_username}, $self->{proxy_password} if $proxy and $self->{proxy_username} and $self->{proxy_password} and wantarray;
+    return $self->{proxy_username}.":".$self->{proxy_password} if $proxy and $self->{proxy_username} and $self->{proxy_password};
+    return $self->{username}, $self->{password} if $self->{username} and $self->{password} and wantarray;
+    return $self->{username}.":".$self->{password} if $self->{username} and $self->{password};
     return undef;
 }
 

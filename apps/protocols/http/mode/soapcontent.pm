@@ -36,47 +36,56 @@ sub new {
     $self->{version} = '1.2';
     $options{options}->add_options(arguments =>
             {
-            "service-soap:s"        => { name => 'service_soap' },
-            "data:s"                => { name => 'data' },
-            "lookup:s@"             => { name => 'lookup' },
-            "hostname:s"            => { name => 'hostname' },
-            "http-peer-addr:s"      => { name => 'http_peer_addr' },
-            "vhost:s"               => { name => 'vhost' },
-            "port:s"                => { name => 'port', },
-            "proto:s"               => { name => 'proto' },
-            "urlpath:s"             => { name => 'url_path' },
-            "credentials"           => { name => 'credentials' },
-            "basic"                 => { name => 'basic' },
-            "ntlm"                  => { name => 'ntlm' }, # Deprecated
-            "ntlmv2"                => { name => 'ntlmv2' },
-            "username:s"            => { name => 'username' },
-            "password:s"            => { name => 'password' },
-            "proxyurl:s"            => { name => 'proxyurl' },
-            "proxypac:s"            => { name => 'proxypac' },
-            "header:s@"             => { name => 'header' },
-            "timeout:s"             => { name => 'timeout', default => 10 },
-            "ssl-opt:s@"            => { name => 'ssl_opt' },
-            "ssl:s"					=> { name => 'ssl', },
-            "cert-file:s"           => { name => 'cert_file' },
-            "key-file:s"            => { name => 'key_file' },
-            "cacert-file:s"         => { name => 'cacert_file' },
-            "cert-pwd:s"            => { name => 'cert_pwd' },
-            "cert-pkcs12"           => { name => 'cert_pkcs12' },
-            "unknown-status:s"      => { name => 'unknown_status' },
-            "warning-status:s"      => { name => 'warning_status' },
-            "critical-status:s"     => { name => 'critical_status' },
-            "warning-numeric:s"       => { name => 'warning_numeric' },
-            "critical-numeric:s"      => { name => 'critical_numeric' },
-            "warning-string:s"        => { name => 'warning_string' },
-            "critical-string:s"       => { name => 'critical_string' },
-            "warning-time:s"          => { name => 'warning_time' },
-            "critical-time:s"         => { name => 'critical_time' },
-            "threshold-value:s"       => { name => 'threshold_value', default => 'count' },
-            "format-ok:s"             => { name => 'format_ok', default => '%{count} element(s) found' },
-            "format-warning:s"        => { name => 'format_warning', default => '%{count} element(s) found' },
-            "format-critical:s"       => { name => 'format_critical', default => '%{count} element(s) found' },
-            "values-separator:s"      => { name => 'values_separator', default => ', ' },
+            "service-soap:s"       => { name => 'service_soap' },
+            "data:s"               => { name => 'data' },
+            "lookup:s@"            => { name => 'lookup' },
+            "hostname:s"           => { name => 'hostname' },
+            "http-peer-addr:s"     => { name => 'http_peer_addr' },
+            "vhost:s"              => { name => 'vhost' }, # Deprecated
+            "port:s"               => { name => 'port' },
+            "proto:s"              => { name => 'proto' },
+            "urlpath:s"            => { name => 'url_path' },
+            "credentials"          => { name => 'credentials' }, # Deprecated
+            "basic"                => { name => 'basic' },
+            "ntlm"                 => { name => 'ntlm' }, # Deprecated
+            "username:s"           => { name => 'username' },
+            "password:s"           => { name => 'password' },
+            "proxyurl:s"           => { name => 'proxyurl' },
+            "proxypac:s"           => { name => 'proxypac' },
+            "proxy-basic"          => { name => 'proxy_basic' },
+            "proxy-username:s"     => { name => 'proxy_username' },
+            "proxy-password:s"     => { name => 'proxy_password' },
+            "ntlmv2"               => { name => 'ntlmv2' },
+            "expected-string:s"    => { name => 'expected_string' },
+            "timeout:s"            => { name => 'timeout', default => 10 },
+            "no-follow"            => { name => 'no_follow', },
+            "ssl:s"                => { name => 'ssl', },
+            "ssl-opt:s@"           => { name => 'ssl_opt' }, # Deprecated
+            "cert-file:s"          => { name => 'cert_file' },
+            "key-file:s"           => { name => 'key_file' },
+            "cacert-file:s"        => { name => 'cacert_file' },
+            "cert-pwd:s"           => { name => 'cert_pwd' },
+            "cert-pkcs12"          => { name => 'cert_pkcs12' },
+            "header:s@"            => { name => 'header' },
+            "get-param:s@"         => { name => 'get_param' },
+            "post-param:s@"        => { name => 'post_param' },
+            "cookies-file:s"       => { name => 'cookies_file' }, # Deprecated
+            "unknown-status:s"     => { name => 'unknown_status' },
+            "warning-status:s"     => { name => 'warning_status' },
+            "critical-status:s"    => { name => 'critical_status' },
+            "warning-numeric:s"    => { name => 'warning_numeric' },
+            "critical-numeric:s"   => { name => 'critical_numeric' },
+            "warning-string:s"     => { name => 'warning_string' },
+            "critical-string:s"    => { name => 'critical_string' },
+            "warning-time:s"       => { name => 'warning_time' },
+            "critical-time:s"      => { name => 'critical_time' },
+            "threshold-value:s"    => { name => 'threshold_value', default => 'count' },
+            "format-ok:s"          => { name => 'format_ok', default => '%{count} element(s) found' },
+            "format-warning:s"     => { name => 'format_warning', default => '%{count} element(s) found' },
+            "format-critical:s"    => { name => 'format_critical', default => '%{count} element(s) found' },
+            "values-separator:s"   => { name => 'values_separator', default => ', ' },
             });
+    
     $self->{count} = 0;
     $self->{count_ok} = 0;
     $self->{count_warning} = 0;
@@ -392,7 +401,7 @@ HTTP OPTIONS:
 
 =item B<--hostname>
 
-IP Addr/FQDN of the Webserver host
+IP Addr/FQDN of the webserver host
 
 =item B<--http-peer-addr>
 
@@ -400,35 +409,23 @@ Set the address you want to connect (Useful if hostname is only a vhost. no ip r
 
 =item B<--port>
 
-Port used by Webserver
-
-=item B<--proxyurl>
-
-Proxy URL
-
-=item B<--proxypac>
-
-Proxy pac file (can be an url or local file)
+Port used by webserver
 
 =item B<--proto>
 
-Specify https if needed
+Specify https if needed (Default: 'http')
 
 =item B<--urlpath>
 
-Set path to get Webpage (Default: '/')
-
-=item B<--credentials>
-
-Specify this option if you access webpage with authentication
+Set path to get webpage (Default: '/')
 
 =item B<--username>
 
-Specify username for authentication (Mandatory if --credentials is specified)
+Specify username for webserver authentication
 
 =item B<--password>
 
-Specify password for authentication (Mandatory if --credentials is specified)
+Specify password for webserver authentication
 
 =item B<--basic>
 
@@ -436,11 +433,33 @@ Specify this option if you access webpage over basic authentication and don't wa
 
 Specify this option if you access webpage over hidden basic authentication or you'll get a '404 NOT FOUND' error.
 
-(Use with --credentials)
-
 =item B<--ntlmv2>
 
-Specify this option if you access webpage over ntlmv2 authentication (Use with --credentials and --port options)
+Specify this option if you access webpage over ntlmv2 authentication
+
+=item B<--proxyurl>
+
+Proxy URL
+
+You must install LWP::Protocol::connect library and use 'connect' schema to allow HTTP/CONNECT method (Example: --proxyurl='connect://myproxy.lan:3128').
+
+=item B<--proxypac>
+
+Proxy pac file (can be an url or local file)
+
+=item B<--proxy-username>
+
+Specify username for proxy authentication
+
+=item B<--proxy-password>
+
+Specify password for proxy authentication
+
+=item B<--proxy-basic>
+
+Specify this option if you access proxy over basic authentication and don't want a '407 PROXY AUTHENTICATION REQUIRED' error to be logged on your proxy server.
+
+Specify this option if you access proxy over hidden basic authentication or you'll get a '407 PROXY AUTHENTICATION REQUIRED' error.
 
 =item B<--timeout>
 
@@ -448,7 +467,7 @@ Threshold for HTTP timeout (Default: 10)
 
 =item B<--ssl-opt>
 
-Set SSL Options (--ssl-opt="SSL_version => TLSv1" --ssl-opt="SSL_verify_mode => SSL_VERIFY_NONE").
+Set SSL Options (Multiple option. Examples: --ssl-opt="SSL_version => TLSv1" --ssl-opt="SSL_verify_mode => SSL_VERIFY_NONE").
 
 =item B<--cert-file>
 
