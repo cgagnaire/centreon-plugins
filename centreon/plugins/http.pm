@@ -82,7 +82,7 @@ sub check_options {
         $self->{output}->option_exit();
     }
 
-    $options{request}->{port} = $self->get_port();
+    $options{request}->{port} = $self->get_port_request();
 
     $options{request}->{headers} = {};
     if (defined($options{request}->{header})) {
@@ -160,6 +160,16 @@ sub get_port {
     return $port;
 }
 
+sub get_port_request {
+    my ($self, %options) = @_;
+
+    my $port = '';
+    if (defined($self->{options}->{port}) && $self->{options}->{port} ne '') {
+        $port = $self->{options}->{port};
+    }
+    return $port;
+}
+
 sub get_hostname {
     my ($self, %options) = @_;
 
@@ -230,16 +240,20 @@ sub request {
     my ($req, $url);
     if (defined($request_options->{full_url})) {
         $url = $request_options->{full_url};
-    } elsif (defined($request_options->{port}) && $request_options->{port} =~ /^[0-9]+$/) {
-        $url = $request_options->{proto}. "://" . $request_options->{hostname} . ':' . $request_options->{port} . $request_options->{url_path};
     } else {
         $url = $request_options->{proto}. "://" . $request_options->{hostname} . $request_options->{url_path};
     }
 
     my $uri = URI->new($url);
+
+    if (defined($request_options->{port}) && $request_options->{port} =~ /^[0-9]+$/ && !defined($request_options->{full_url})) {
+        $uri->port($request_options->{port}) unless (($request_options->{port} == '80' && $request_options->{proto} eq "http") || ($request_options->{port} == '443' && $request_options->{proto} eq "https"));
+    }
+
     if (defined($self->{get_params})) {
         $uri->query_form($self->{get_params});
     }
+    
     $req = HTTP::Request->new($request_options->{method}, $uri);
 
     my $content_type_forced;
@@ -296,6 +310,7 @@ sub request {
     $self->load_cookies();
 
     $response = $self->{ua}->request($req);
+    print Dumper $response;
 
     $self->save_cookies();
 
