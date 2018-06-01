@@ -373,6 +373,22 @@ sub rds_list_clusters {
     return $cluster_results;
 }
 
+sub get_map {
+    my ($self, %options) = @_;
+
+    my $result;
+    eval {
+        my $service = Paws->service(uc($options{service}), region => $options{region});
+        my $result = $service->xxx();
+    };
+    if ($@) {
+        $self->{output}->add_option_msg(short_msg => "error: $@");
+        $self->{output}->option_exit();
+    }
+    
+    return $result;
+}
+
 1;
 
 __END__

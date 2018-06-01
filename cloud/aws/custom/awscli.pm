@@ -512,6 +512,38 @@ sub rds_list_clusters {
     return $cluster_results;
 }
 
+sub get_map_set_cmd {
+    my ($self, %options) = @_;
+    
+    return if (defined($self->{option_results}->{command_options}) && $self->{option_results}->{command_options} ne '');
+    my $cmd_options = $options{service} . " " . $options{command} . " --region $options{region} --output json";
+    return $cmd_options; 
+}
+
+sub get_map {
+    my ($self, %options) = @_;
+    
+    my $cmd_options = $self->get_map_set_cmd(%options);
+    my ($response) = centreon::plugins::misc::execute(
+            output => $self->{output},
+            options => $self->{option_results},
+            sudo => $self->{option_results}->{sudo},
+            command => $self->{option_results}->{command},
+            command_path => $self->{option_results}->{command_path},
+            command_options => $cmd_options
+    );
+    my $result;
+    eval {
+        $result = JSON::XS->new->utf8->decode($response);
+    };
+    if ($@) {
+        $self->{output}->add_option_msg(short_msg => "Cannot decode json response: $@");
+        $self->{output}->option_exit();
+    }
+
+    return $result;
+}
+
 1;
 
 __END__
