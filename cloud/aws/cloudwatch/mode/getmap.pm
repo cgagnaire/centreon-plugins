@@ -61,6 +61,7 @@ sub run {
 
     # VPC
     foreach my $vpc (@{$vpcs->{Vpcs}}) {
+        next if (!defined($vpc->{VpcId}));
         my %vpc;
         $vpc{id} = $vpc->{VpcId};
         foreach my $tag (@{$vpc->{Tags}}) {
@@ -68,13 +69,15 @@ sub run {
                 $vpc{name} = $tag->{Value};
             }
         }
-        push @infra, \%vpc if (defined $vpc{id});
+        push @infra, \%vpc;
     }
 
     # EC2
     foreach my $reservation (@{$instances->{Reservations}}) {
         foreach my $instance (@{$reservation->{Instances}}) {
+            next if (!defined($instance->{InstanceId}));
             my %ec2;
+            $ec2{id} = $instance->{InstanceId};
             foreach my $tag (@{$instance->{Tags}}) {
                 if ($tag->{Key} eq "aws:autoscaling:groupName" && defined($tag->{Value})) {
                     $ec2{asg} = $tag->{Value};
@@ -83,38 +86,33 @@ sub run {
                     $ec2{name} = $tag->{Value};
                 }
             }
-
-            $ec2{id} = $instance->{InstanceId};
-
             foreach my $vpc (@infra) {
                 next if (defined($instance->{VpcId}) && $instance->{VpcId} ne '' && $vpc->{id} !~ /$instance->{VpcId}/);
-                push @{$vpc->{ec2}}, \%ec2 if (defined $ec2{id});
+                push @{$vpc->{ec2}}, \%ec2;
             }
         }
     }
 
     # RDS
     foreach my $db_instance (@{$db_instances->{DBInstances}}) {
+        next if (!defined($db_instance->{DbiResourceId}));
         my %rds;
-
         $rds{id} = $db_instance->{DbiResourceId};
         $rds{name} = $db_instance->{DBInstanceIdentifier};
-
         foreach my $vpc (@infra) {
             next if (defined($db_instance->{DBSubnetGroup}->{VpcId}) && $db_instance->{DBSubnetGroup}->{VpcId} ne '' && $vpc->{id} !~ /$db_instance->{DBSubnetGroup}->{VpcId}/);
-            push @{$vpc->{rds}}, \%rds if (defined $rds{id});
+            push @{$vpc->{rds}}, \%rds;
         }
     }
 
     # ELB
     foreach my $load_balancers (@{$load_balancers->{LoadBalancerDescriptions}}) {
+        next if (!defined($load_balancers->{LoadBalancerName}));
         my %elb;
-
         $elb{name} = $load_balancers->{LoadBalancerName};
-
         foreach my $vpc (@infra) {
             next if (defined($load_balancers->{VPCId}) && $load_balancers->{VPCId} ne '' && $vpc->{id} !~ /$load_balancers->{VPCId}/);
-            push @{$vpc->{elb}}, \%elb if (defined $elb{name});
+            push @{$vpc->{elb}}, \%elb;
         }
     }
 
